@@ -1,0 +1,21 @@
+import { Schema, model } from 'mongoose';
+
+export const ORDER_KINDS = ['service', 'product'] as const;
+export const ORDER_STATUSES = ['pending', 'accepted', 'declined', 'completed'] as const;
+
+/** A service request or a product order placed by a customer with an entrepreneur. */
+const orderSchema = new Schema(
+  {
+    customer: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    entrepreneur: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    kind: { type: String, enum: ORDER_KINDS, required: true },
+    item: { type: Schema.Types.ObjectId }, // Service or Product id (snapshot below keeps history stable)
+    title: { type: String, required: true },
+    price: { type: Number, required: true, min: 0 },
+    status: { type: String, enum: ORDER_STATUSES, default: 'pending', index: true },
+    note: { type: String, default: '' },
+  },
+  { timestamps: true },
+);
+
+export const Order = model('Order', orderSchema);

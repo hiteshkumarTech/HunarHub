@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HunarHub — Digital Marketplace for Local Micro-Entrepreneurs</title>
+<meta name="description" content="HunarHub gives cobblers, potters, tailors, artisans and local vendors digital visibility and direct access to customers." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root { --bg:#fcfcfc; --ink:#111; --dark:#0a0a0a; }
+  html, body { background: var(--bg); color: var(--ink); overflow-x: hidden; }
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  ::selection { background: #000; color: #fff; }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: #d7d7d7; }
+  ::-webkit-scrollbar-thumb:hover { background: #bcbcbc; }
+
+  .text-mega { font-size: 21vw; line-height: .75; letter-spacing: -.04em; }
+
+  /* --- entrance animations --- */
+  @keyframes letterUp { from { transform: translateY(120%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sandIn   { 0% { opacity: 0; filter: blur(14px); transform: scale(1.08) translateY(-6px); }
+                        60% { opacity: .7; filter: blur(4px); }
+                        100% { opacity: 1; filter: blur(0); transform: scale(1) translateY(0); } }
+
+  .anim-fadeup { opacity: 0; animation: fadeUp .8s cubic-bezier(.16,1,.3,1) forwards; }
+  .anim-fadein { opacity: 0; animation: fadeIn 1.4s ease forwards; }
+
+  .wm { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; }
+  .wm-l { display: inline-block; transform: translateY(120%); opacity: 0; animation: letterUp 1.2s cubic-bezier(.16,1,.3,1) forwards; }
+
+  /* reveal on scroll */
+  [data-reveal] { opacity: 0; transform: translateY(40px); transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1); }
+  [data-reveal].in { opacity: 1; transform: none; }
+
+  .sand { animation: sandIn .9s cubic-bezier(.16,1,.3,1) both; }
+
+  /* CTA sliding panel */
+  .cta-slide { transition: transform .7s cubic-bezier(.16,1,.3,1); }
+  .grain { background-image: radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px); background-size: 3px 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Preview runtime: React 18 UMD + Babel (in-browser JSX) + Tailwind Play CDN.
+     The production project (see the source bundle) is React 19 + Vite 6 + Tailwind 4 + Motion + react-router-dom + lucide-react. -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ============================== utils ============================== */
+const cn = (...a) => a.filter(Boolean).join(' ');
+const inr = (n) => '₹' + Number(n).toLocaleString('en-IN');
+const pic = (seed, w, h) => `https://picsum.photos/seed/${encodeURIComponent(seed)}/${w}/${h}?grayscale`;
+
+/* ============================== icons (inline SVG) ============================== */
+const S = ({ children, size = 20, stroke = 1.5, className = '', vb = '0 0 24 24', ...p }) => (
+  <svg width={size} height={size} viewBox={vb} fill="none" stroke="currentColor" strokeWidth={stroke}
+       strokeLinecap="round" strokeLinejoin="round" className={className} {...p}>{children}</svg>
+);
+const ArrowRight   = (p) => <S {...p}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></S>;
+const ArrowUpRight = (p) => <S {...p}><path d="M7 7h10v10"/><path d="M7 17 17 7"/></S>;
+const Plus         = (p) => <S {...p}><path d="M5 12h14"/><path d="M12 5v14"/></S>;
+const X            = (p) => <S {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></S>;
+const Search       = (p) => <S {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></S>;
+const MapPin       = (p) => <S {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></S>;
+const Check        = (p) => <S {...p}><path d="M20 6 9 17l-5-5"/></S>;
+const Clock        = (p) => <S {...p}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></S>;
+const TrendingUp   = (p) => <S {...p}><path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5L2 17"/></S>;
+const Package      = (p) => <S {...p}><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></S>;
+const Wallet       = (p) => <S {...p}><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3"/><path d="M3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><path d="M18 12a2 2 0 0 0 0 4h3v-4Z"/></S>;
+const Sparkles     = (p) => <S {...p}><path d="M9.9 15.5A2 2 0 0 0 8.5 14L2.4 12.5a.5.5 0 0 1 0-1L8.5 10A2 2 0 0 0 9.9 8.5L11.5 2.4a.5.5 0 0 1 1 0L14 8.5A2 2 0 0 0 15.5 9.9l6.1 1.6a.5.5 0 0 1 0 1L15.5 14A2 2 0 0 0 14 15.5l-1.6 6.1a.5.5 0 0 1-1 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></S>;
+const Star = ({ filled, ...p }) => <S vb="0 0 24 24" fill={filled ? 'currentColor' : 'none'} {...p}><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2Z"/></S>;
+/* craft icons */
+const IcCobbler = (p) => <S {...p}><path d="M4 16v-2.4C4 11.5 3 10.5 3 8c0-2.7 1.5-6 4.5-6C9.4 2 10 3.8 10 5.5c0 3.1-2 5.7-2 8.7V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.4c0-2.1 1-3.1 1-5.6 0-2.7-1.5-6-4.5-6C14.6 6 14 7.8 14 9.5c0 3.1 2 5.7 2 8.7V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></S>;
+const IcPotter  = (p) => <S {...p}><path d="M8 2h8"/><path d="M9.5 2C9.5 4 6 5 6 8.5a6 6 0 0 0 12 0C18 5 14.5 4 14.5 2"/><path d="M12 14.5V20"/><path d="M8.5 20h7"/></S>;
+const IcTailor  = (p) => <S {...p}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9"/><path d="m14.5 14.5 5.5 5.5"/><path d="M8.1 8.1 12 12"/></S>;
+const IcArtisan = (p) => <S {...p}><circle cx="13.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".8" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1.1a1.6 1.6 0 0 1 1.6-1.6h2c3 0 5.5-2.5 5.5-5.6C22 6 17.5 2 12 2Z"/></S>;
+const IcVendor  = (p) => <S {...p}><path d="m3 7 2-4h14l2 4"/><path d="M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/><path d="M3 7h18"/><path d="M9 20v-5h6v5"/></S>;
+
+const CAT_ICON = { cobbler: IcCobbler, potter: IcPotter, tailor: IcTailor, artisan: IcArtisan, vendor: IcVendor };
+
+/* ============================== mock data ============================== */
+const CATEGORIES = [
+  { id: 'cobbler', name: 'Cobbler',  sub: 'Leather & footwear',   desc: 'Repairs, resoling and handmade leather goods.' },
+  { id: 'potter',  name: 'Potter',   sub: 'Kumhar · clay craft',  desc: 'Terracotta, diyas and hand-thrown pottery.' },
+  { id: 'tailor',  name: 'Tailor',   sub: 'Stitching & alter.',   desc: 'Bespoke stitching, alterations and embroidery.' },
+  { id: 'artisan', name: 'Artisan',  sub: 'Handmade décor',       desc: 'Mirror-work, woodcraft and handmade décor.' },
+  { id: 'vendor',  name: 'Vendor',   sub: 'Local goods',          desc: 'Home-made pickles, spices and local produce.' },
+];
+
+const CRAFTS = [
+  { id: 'potter',  name: 'Handcrafted Pottery',  image: pic('hunar-pottery', 900, 900) },
+  { id: 'tailor',  name: 'Bespoke Tailoring',    image: pic('hunar-tailor', 900, 900) },
+  { id: 'cobbler', name: 'Leather & Footwear',   image: pic('hunar-leather', 900, 900) },
+  { id: 'artisan', name: 'Artisan Creations',    image: pic('hunar-artisan', 900, 900) },
+  { id: 'vendor',  name: 'Local Market Goods',   image: pic('hunar-market', 900, 900) },
+];
+
+const ENTREPRENEURS = [
+  { id: 'ramesh', name: 'Ramesh Kumar', category: 'potter', craft: 'Potter (Kumhar)', city: 'Jaipur', state: 'Rajasthan',
+    exp: 24, rating: 4.9, reviews: 128, start: 120, available: true, verified: true,
+    bio: 'Third-generation kumhar hand-throwing terracotta on a traditional wheel. Specialises in garden pots, diyas and clay water bottles fired in a wood kiln.',
+    services: [ { name: 'Custom Terracotta Pot', price: 250, dur: '3 days' }, { name: 'Diwali Diya Set (12 pcs)', price: 120, dur: '1 day' }, { name: 'Clay Water Bottle', price: 400, dur: '2 days' } ],
+    products: [ { name: 'Painted Planter', price: 320 }, { name: 'Kulhad Set (6)', price: 180 }, { name: 'Terracotta Vase', price: 540 } ] },
+  { id: 'sunita', name: 'Sunita Devi', category: 'tailor', craft: 'Tailor', city: 'Lucknow', state: 'Uttar Pradesh',
+    exp: 12, rating: 4.8, reviews: 94, start: 150, available: true, verified: true,
+    bio: 'Blouse and kurti specialist trained in Lucknawi chikankari. Precise measurements, quick turnarounds and delicate hand embroidery.',
+    services: [ { name: 'Blouse Stitching', price: 300, dur: '4 days' }, { name: 'Kurti Alteration', price: 150, dur: '2 days' }, { name: 'Chikankari Embroidery', price: 800, dur: '7 days' } ],
+    products: [ { name: 'Chikankari Dupatta', price: 950 }, { name: 'Cotton Kurti', price: 700 } ] },
+  { id: 'abdul', name: 'Abdul Karim', category: 'cobbler', craft: 'Cobbler', city: 'Old Delhi', state: 'Delhi',
+    exp: 30, rating: 4.7, reviews: 76, start: 80, available: false, verified: true,
+    bio: 'Master mochi resoling shoes and crafting custom leather sandals for three decades near Jama Masjid.',
+    services: [ { name: 'Shoe Resoling', price: 200, dur: '1 day' }, { name: 'Leather Polish & Care', price: 80, dur: 'Same day' }, { name: 'Custom Leather Sandals', price: 900, dur: '5 days' } ],
+    products: [ { name: 'Handmade Kolhapuri', price: 1100 }, { name: 'Leather Belt', price: 450 } ] },
+  { id: 'meena', name: 'Meena Kumari', category: 'artisan', craft: 'Artisan · Mirror-work', city: 'Kutch', state: 'Gujarat',
+    exp: 18, rating: 5.0, reviews: 210, start: 350, available: true, verified: true,
+    bio: 'Kutchi embroidery and mirror-work artisan creating wall hangings, torans and cushion covers for homes across India.',
+    services: [ { name: 'Custom Wall Hanging', price: 1200, dur: '10 days' }, { name: 'Toran (door hanging)', price: 650, dur: '6 days' } ],
+    products: [ { name: 'Mirror-work Cushion', price: 550 }, { name: 'Embroidered Toran', price: 780 }, { name: 'Wall Hanging', price: 1500 } ] },
+  { id: 'ravi', name: 'Ravi Prajapati', category: 'potter', craft: 'Potter (Kumhar)', city: 'Khurja', state: 'Uttar Pradesh',
+    exp: 15, rating: 4.6, reviews: 58, start: 90, available: true, verified: false,
+    bio: 'Khurja blue-pottery maker producing glazed ceramic crockery and decorative tiles.',
+    services: [ { name: 'Glazed Dinner Set', price: 1400, dur: '8 days' }, { name: 'Decorative Tiles (set)', price: 600, dur: '5 days' } ],
+    products: [ { name: 'Blue Pottery Bowl', price: 240 }, { name: 'Ceramic Mug', price: 160 } ] },
+  { id: 'lakshmi', name: 'Lakshmi Naidu', category: 'vendor', craft: 'Local Vendor', city: 'Madurai', state: 'Tamil Nadu',
+    exp: 9, rating: 4.5, reviews: 41, start: 60, available: true, verified: true,
+    bio: 'Home-made pickles, filter-coffee powder and hand-ground spice blends prepared in small batches.',
+    services: [ { name: 'Custom Spice Blend', price: 220, dur: '2 days' } ],
+    products: [ { name: 'Mango Pickle (500g)', price: 180 }, { name: 'Filter Coffee Powder', price: 240 }, { name: 'Sambar Masala', price: 130 } ] },
+  { id: 'iqbal', name: 'Iqbal Ansari', category: 'tailor', craft: 'Tailor · Menswear', city: 'Bhopal', state: 'Madhya Pradesh',
+    exp: 20, rating: 4.8, reviews: 132, start: 200, available: true, verified: true,
+    bio: 'Menswear tailor specialising in kurta-pyjama, sherwani and formal trousers with a precise finish.',
+    services: [ { name: 'Kurta-Pyjama Set', price: 600, dur: '5 days' }, { name: 'Sherwani (bespoke)', price: 3500, dur: '14 days' }, { name: 'Trouser Stitching', price: 350, dur: '3 days' } ],
+    products: [ { name: 'Ready Cotton Kurta', price: 850 } ] },
+  { id: 'gopal', name: 'Gopal Sharma', category: 'artisan', craft: 'Artisan · Woodwork', city: 'Saharanpur', state: 'Uttar Pradesh',
+    exp: 22, rating: 4.9, reviews: 87, start: 300, available: false, verified: true,
+    bio: 'Saharanpur wood-carving artisan crafting jharokhas, trays and carved home décor from sheesham wood.',
+    services: [ { name: 'Carved Wall Panel', price: 2500, dur: '12 days' }, { name: 'Wooden Serving Tray', price: 700, dur: '4 days' } ],
+    products: [ { name: 'Carved Trinket Box', price: 480 }, { name: 'Sheesham Coasters (6)', price: 360 } ] },
+];
+
+const byId = (id) => ENTREPRENEURS.find((e) => e.id === id);
+
+/* ============================== shared bits ============================== */
+function useReveal(dep) {
+  useEffect(() => {
+    const els = document.querySelectorAll('[data-reveal]:not(.in)');
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
+      { rootMargin: '-60px' }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [dep]);
+}
+
+function Monogram({ name, size = 48, className = '' }) {
+  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div className={cn('shrink-0 rounded-full bg-[#111] text-[#fcfcfc] flex items-center justify-center font-mono tracking-wide select-none', className)}
+         style={{ width: size, height: size, fontSize: size * 0.34 }}>
+      {initials}
+    </div>
+  );
+}
+
+function Stars({ value, size = 13 }) {
+  return (
+    <span className="inline-flex items-center gap-[2px] text-[#111]">
+      {[0, 1, 2, 3, 4].map((i) => <Star key={i} size={size} stroke={1.2} filled={i < Math.round(value)} />)}
+    </span>
+  );
+}
+
+function CatIcon({ id, ...p }) { const C = CAT_ICON[id] || IcArtisan; return <C {...p} />; }
+
+/* ============================== header ============================== */
+const NAV = [
+  { label: 'Discover', route: 'home' },
+  { label: 'Artisans', route: 'browse' },
+  { label: 'Products', route: 'browse' },
+  { label: 'Sell', route: 'dashboard' },
+  { label: 'About', route: 'home' },
+];
+
+function Header({ route, go }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <header className="relative z-20 pt-6 px-6 md:px-16">
+      {/* wordmark */}
+      <div className="overflow-hidden">
+        <h1 className="wm" aria-label="HunarHub">
+          {'HUNARHUB'.split('').map((c, i) => (
+            <span key={i} className="wm-l text-[13.5vw] md:text-[12.5vw] font-semibold tracking-[-0.03em] text-[#111]"
+                  style={{ animationDelay: (0.1 + i * 0.06) + 's' }}>{c}</span>
+          ))}
+        </h1>
+      </div>
+
+      {/* sub-nav */}
+      <div className="flex justify-between items-start mt-6 md:mt-8 anim-fadeup" style={{ animationDelay: '.9s' }}>
+        <div className="w-[22%] md:w-[15%] text-[10px] md:text-[11px] font-mono tracking-[0.2em] uppercase text-gray-800 leading-relaxed">
+          <div>Local</div><div>Craft</div><div>Market</div>
+        </div>
+        <div className="hidden md:flex w-[5%] justify-center pt-1"><ArrowRight size={14} stroke={1} className="text-gray-400" /></div>
+        <p className="flex-1 md:w-[30%] md:flex-none text-[10px] md:text-[11px] font-mono tracking-[0.15em] uppercase text-gray-800 leading-relaxed px-4 md:px-0">
+          Empowering local artisans and micro-entrepreneurs through digital discovery and direct trade.
+        </p>
+        <div className="hidden md:flex w-[5%] justify-center pt-1"><ArrowRight size={14} stroke={1} className="text-gray-400" /></div>
+        <nav className="hidden md:flex w-[15%] flex-col text-[10px] md:text-[11px] font-mono tracking-[0.2em] uppercase text-gray-800 gap-1">
+          {NAV.map((n) => (
+            <button key={n.label} onClick={() => go(n.route)} className="text-left hover:text-black hover:underline underline-offset-4 transition-colors">{n.label}</button>
+          ))}
+        </nav>
+        {/* hamburger */}
+        <button onClick={() => setOpen((o) => !o)} className="md:hidden relative z-[60] flex flex-col gap-[6px] pt-1" aria-label="Menu">
+          <span className={cn('block h-[1.5px] bg-black transition-all duration-300', open ? 'w-8 rotate-45 translate-y-[7.5px]' : 'w-8')} />
+          <span className={cn('block h-[1.5px] bg-black transition-all duration-300', open ? 'w-8 -rotate-45 -translate-y-[1px]' : 'w-6')} />
+        </button>
+      </div>
+
+      {/* mobile menu */}
+      {open && (
+        <div className="md:hidden mt-6 -mx-6 px-6 py-8 bg-[#fcfcfc] border-y border-gray-200 shadow-xl anim-fadeup" style={{ animationDuration: '.35s' }}>
+          <nav className="flex flex-col gap-6 text-sm font-mono tracking-[0.2em] uppercase text-gray-800">
+            {NAV.map((n) => <button key={n.label} onClick={() => { go(n.route); setOpen(false); }} className="text-left hover:text-black">{n.label}</button>)}
+          </nav>
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* ============================== landing: hero ============================== */
+function Hero({ go }) {
+  const [showBg, setShowBg] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setShowBg(true), 900); return () => clearTimeout(t); }, []);
+  return (
+    <section className="relative w-full min-h-[92vh] flex flex-col overflow-hidden">
+      {/* background image (fades in, mimics the video delay) */}
+      <div className={cn('pointer-events-none absolute inset-0 z-0 transition-opacity duration-[1400ms]', showBg ? 'opacity-100' : 'opacity-0')}>
+        <img src={pic('hunar-hero-hands', 1600, 1000)} alt="" className="w-full h-full object-cover" style={{ maskImage: 'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent), linear-gradient(to right, transparent, black 55%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent), linear-gradient(to right, transparent, black 55%)', maskComposite: 'intersect', WebkitMaskComposite: 'source-in', opacity: 0.5 }} />
+      </div>
+
+      <div className="relative z-10 flex-1 flex flex-col md:flex-row md:justify-between px-6 md:px-16 mt-16 sm:mt-20 md:mt-24">
+        {/* left */}
+        <div className="w-full md:w-[320px]">
+          <div className="flex items-center gap-3 text-xs font-mono text-gray-500 anim-fadeup" style={{ animationDelay: '.6s' }}>
+            <span>01</span><span className="w-16 h-[1.5px] bg-black/20" />
+          </div>
+          <h2 className="mt-6 text-[3.2rem] md:text-[5rem] font-normal tracking-tight leading-[1] anim-fadeup" style={{ animationDelay: '.72s' }}>
+            MADE<br />BY HAND
+          </h2>
+          <p className="mt-6 text-[13px] md:text-[14px] text-gray-700 w-[240px] leading-[1.6] anim-fadeup" style={{ animationDelay: '.84s' }}>
+            Discover skilled local makers near you and support the craft behind every handmade piece.
+          </p>
+          <div className="anim-fadeup" style={{ animationDelay: '.96s' }}>
+            <button onClick={() => go('browse')}
+              className="group relative mt-8 inline-flex items-center gap-3 overflow-hidden rounded-md border border-[#1a1a1a] bg-[#1a1a1a] px-6 py-3.5 shadow-sm transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[3px_3px_0px_rgba(17,17,17,.5)] active:translate-y-0 active:shadow-none">
+              <span className="cta-slide absolute inset-0 z-0 -translate-x-[101%] bg-[#fcfcfc] group-hover:translate-x-0" />
+              <Sparkles size={18} stroke={1.6} className="relative z-10 text-white transition-all duration-300 group-hover:text-[#111] group-hover:scale-110 group-hover:-rotate-12 group-hover:-translate-y-1" />
+              <span className="relative z-10 text-[15px] font-medium text-white transition-colors duration-300 group-hover:text-[#111]">Explore Crafts</span>
+            </button>
+          </div>
+        </div>
+
+        {/* right — featured artisan */}
+        <div className="hidden md:flex flex-col w-[220px] mt-12 md:mt-24 gap-8">
+          <div className="anim-fadeup" style={{ animationDelay: '.9s' }}>
+            <div className="text-[10px] font-bold font-mono tracking-widest uppercase text-[#111]">Featured Artisan</div>
+            <div className="mt-3 flex items-center gap-3">
+              <Monogram name="Ramesh Kumar" size={40} />
+              <div>
+                <div className="text-[13px] font-medium leading-tight">Ramesh Kumar</div>
+                <div className="text-[11px] text-gray-600 font-mono">Potter · Jaipur</div>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 anim-fadeup" style={{ animationDelay: '1.02s' }}>
+            <div><div className="text-[10px] font-mono tracking-widest uppercase text-gray-500">Experience</div><div className="text-[13px] font-medium">24 yrs</div></div>
+            <div><div className="text-[10px] font-mono tracking-widest uppercase text-gray-500">Rating</div><div className="text-[13px] font-medium">4.9 ★</div></div>
+          </div>
+          <button onClick={() => go('profile', 'ramesh')} className="group flex items-center gap-3 anim-fadeup" style={{ animationDelay: '1.14s' }}>
+            <span className="w-10 h-10 rounded-full border border-gray-400 flex items-center justify-center transition-colors group-hover:border-black group-hover:bg-[#111]">
+              <Plus size={16} className="text-[#111] transition-colors group-hover:text-white" />
+            </span>
+            <span className="text-[10px] font-mono uppercase tracking-widest font-bold">View Profile</span>
+          </button>
+        </div>
+      </div>
+
+      {/* scroll indicator */}
+      <div className="hidden md:flex items-center gap-3 absolute bottom-10 left-[4rem] anim-fadeup" style={{ animationDelay: '1.2s' }}>
+        <span className="w-12 h-12 rounded-full border border-gray-300 flex items-center justify-center gap-[4px]">
+          <span className="w-[1px] h-[12px] bg-gray-600" /><span className="w-[1px] h-[12px] bg-gray-600" />
+        </span>
+        <span className="text-[10px] font-mono tracking-widest uppercase text-gray-500 font-semibold">Scroll to explore</span>
+      </div>
+    </section>
+  );
+}
+
+/* ============================== landing: explore ============================== */
+function Explore({ go }) {
+  return (
+    <section className="relative w-full min-h-[70vh] md:min-h-[88vh] bg-[#fcfcfc] flex flex-col items-center pt-20 md:pt-28 px-6 z-20">
+      <div className="text-[10px] md:text-[11px] font-mono tracking-[0.2em] mb-10" data-reveal>
+        <span className="text-gray-500">[ 02 ]</span> <span className="text-gray-900 font-bold uppercase">Explore Local Talent</span>
+      </div>
+      <h2 className="max-w-[1000px] text-center text-[2.1rem] md:text-[3.5rem] lg:text-[4rem] leading-[1.1] font-medium tracking-tight text-[#111]" data-reveal>
+        Discover skilled hands and handmade treasures from makers in your neighbourhood.
+      </h2>
+
+      <div className="flex flex-wrap justify-center gap-3 md:gap-4 mt-10 md:mt-14" data-reveal>
+        {CATEGORIES.map((c, i) => (
+          <button key={c.id} onClick={() => go('browse', null, c.id)}
+            className="group inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white/50 backdrop-blur-sm px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider text-gray-800 transition-colors hover:border-black hover:bg-black hover:text-white"
+            style={{ transitionDelay: (i * 40) + 'ms' }}>
+            <CatIcon id={c.id} size={14} stroke={2} />{c.name}
+          </button>
+        ))}
+      </div>
+
+      {/* category cards */}
+      <div className="w-full max-w-[1100px] grid grid-cols-2 md:grid-cols-5 gap-3 mt-12 md:mt-16" data-reveal>
+        {CATEGORIES.map((c) => (
+          <button key={c.id} onClick={() => go('browse', null, c.id)}
+            className="group text-left border border-gray-200 rounded-lg p-4 bg-white transition-all hover:border-black hover:-translate-y-1">
+            <CatIcon id={c.id} size={22} stroke={1.4} className="text-[#111]" />
+            <div className="mt-6 text-[15px] font-medium">{c.name}</div>
+            <div className="text-[11px] font-mono text-gray-500 uppercase tracking-wide">{c.sub}</div>
+            <div className="mt-3 flex items-center gap-1 text-[11px] font-mono text-gray-400 group-hover:text-black transition-colors">
+              Browse <ArrowUpRight size={13} />
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="hidden md:flex justify-between w-full px-2 md:px-10 mt-auto pt-16 pb-8 text-[10px] font-mono tracking-widest uppercase text-gray-500 font-medium">
+        <span>Handmade. Local. Yours.</span><span>HunarHub © 2026</span>
+      </div>
+    </section>
+  );
+}
+
+/* ============================== landing: featured crafts (dark) ============================== */
+function FeaturedCrafts({ go }) {
+  const [active, setActive] = useState(0);
+  const paused = useRef(false);
+  useEffect(() => {
+    const t = setInterval(() => { if (!paused.current) setActive((p) => (p + 1) % CRAFTS.length); }, 3500);
+    return () => clearInterval(t);
+  }, []);
+  const cur = CRAFTS[active];
+  return (
+    <section className="relative w-full bg-[#0a0a0a] text-white flex flex-col z-30 overflow-hidden">
+      {/* overlapping image */}
+      <img src={pic('hunar-overlap-craft', 1300, 800)} alt="" data-reveal
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-0 w-[150vw] md:w-[1000px] z-0 opacity-40"
+        style={{ transform: 'translate(-50%, -34%)', maskImage: 'radial-gradient(60% 55% at 50% 45%, black, transparent)', WebkitMaskImage: 'radial-gradient(60% 55% at 50% 45%, black, transparent)' }} />
+
+      {/* heading */}
+      <div className="relative z-10 px-8 md:px-16 pt-28 md:pt-44 mb-14 flex flex-col xl:flex-row xl:justify-between gap-10">
+        <h2 className="max-w-[820px] text-[1.7rem] md:text-[3rem] lg:text-[3.6rem] xl:text-[3.8rem] leading-[1.15] font-medium tracking-tight text-white" data-reveal>
+          Curated from generations of skill
+          <span className="inline-flex gap-2 md:gap-3 align-middle mx-2 md:mx-3 -translate-y-1">
+            {['tailor', 'potter', 'artisan'].map((id) => (
+              <span key={id} className="w-10 h-10 md:w-14 md:h-14 rounded-full border border-gray-600 bg-black text-gray-400 flex items-center justify-center transition-colors hover:bg-white hover:text-black hover:border-white">
+                <CatIcon id={id} size={22} stroke={1.4} />
+              </span>
+            ))}
+          </span>
+          &amp; tradition.
+        </h2>
+        <div className="shrink-0" data-reveal>
+          <p className="text-[9px] md:text-[10px] font-mono tracking-widest text-gray-400 uppercase mb-5 leading-relaxed">
+            We don't just sell products<br />we share a maker's story
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {['Authentic', 'Handmade', 'Local'].map((t) => (
+              <span key={t} className="px-5 py-2 rounded-full border border-gray-600 text-[9px] font-mono tracking-widest uppercase text-gray-300 transition-colors hover:bg-white hover:text-black hover:border-white cursor-default">{t}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="h-[1px] bg-gray-800" />
+
+      {/* two-column panel */}
+      <div className="relative z-10 flex flex-col md:flex-row"
+           onMouseEnter={() => (paused.current = true)} onMouseLeave={() => (paused.current = false)}>
+        {/* left */}
+        <div className="w-full md:w-[35%] border-b md:border-b-0 md:border-r border-gray-800 min-h-[360px] md:min-h-[500px] flex flex-col justify-between p-8">
+          <div className="text-gray-500 text-xl tracking-[0.3em]">✳ ✳ ✳</div>
+          <div className="relative flex-1 my-6">
+            <img key={cur.id} src={cur.image} alt={cur.name}
+                 className="sand absolute inset-0 w-[82%] h-[82%] m-auto object-cover rounded" style={{ mixBlendMode: 'luminosity' }} />
+            <div className="grain absolute inset-0 pointer-events-none" />
+          </div>
+          <div className="flex items-end gap-2 text-[10px] font-mono tracking-widest text-[#888] uppercase">
+            <span className="text-white text-2xl leading-none">{String(active + 1).padStart(2, '0')}</span>
+            <span className="text-[#333]">/</span><span>{String(CRAFTS.length).padStart(2, '0')}</span>
+          </div>
+        </div>
+
+        {/* right */}
+        <div className="w-full md:w-[65%]">
+          <div className="border-b border-gray-800 p-8 flex justify-between text-[10px] font-mono text-gray-400 tracking-widest uppercase">
+            <span>Explore the craft. Support the maker.</span>
+            <span className="text-white">Craft 0{active + 1}</span>
+          </div>
+          <div>
+            {CRAFTS.map((ch, i) => (
+              <button key={ch.id} onClick={() => { setActive(i); go('browse', null, ch.id); }}
+                className={cn('w-full flex items-center justify-between border-b border-gray-800/80 px-8 py-7 text-left transition-colors',
+                  i === active ? 'text-white' : 'text-[#444] hover:text-[#999]')}>
+                <span className="text-2xl md:text-[2rem] font-medium tracking-tight">{ch.name}</span>
+                <ArrowUpRight size={22} stroke={1} className={cn('text-gray-400 transition-all duration-500', i === active ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2')} />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="h-[1px] bg-gray-800" />
+      <div className="px-8 py-8 text-[10px] font-mono tracking-widest text-gray-500 uppercase bg-[#0a0a0a]">Crafted with pride across India</div>
+    </section>
+  );
+}
+
+function Landing({ go }) {
+  useReveal('home');
+  return (<><Hero go={go} /><Explore go={go} /><FeaturedCrafts go={go} /></>);
+}
+
+/* ============================== page chrome (sub-pages) ============================== */
+function PageBar({ go, title, crumb }) {
+  return (
+    <div className="px-6 md:px-16 pt-6 pb-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-[#fcfcfc]/90 backdrop-blur z-40">
+      <button onClick={() => go('home')} className="text-[15px] font-semibold tracking-[-0.02em]">HunarHub</button>
+      <nav className="flex items-center gap-6 text-[10px] font-mono uppercase tracking-widest text-gray-600">
+        <button onClick={() => go('browse')} className="hover:text-black">Browse</button>
+        <button onClick={() => go('dashboard')} className="hover:text-black">Sell</button>
+        <span className="hidden md:inline text-gray-400">{crumb}</span>
+      </nav>
+    </div>
+  );
+}
+
+/* ============================== browse ============================== */
+function EntCard({ e, go }) {
+  return (
+    <button onClick={() => go('profile', e.id)}
+      className="group text-left border border-gray-200 rounded-xl overflow-hidden bg-white transition-all hover:border-black hover:-translate-y-1 hover:shadow-[4px_4px_0_rgba(17,17,17,.08)]">
+      <div className="relative h-36 overflow-hidden bg-gray-100">
+        <img src={pic('ent-' + e.id, 600, 360)} alt="" className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
+        <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/80 backdrop-blur px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white">
+          <CatIcon id={e.category} size={11} stroke={2} />{e.craft.split(' ')[0]}
+        </span>
+        {e.available
+          ? <span className="absolute top-3 right-3 rounded-full bg-white px-2 py-1 text-[9px] font-mono uppercase tracking-widest text-green-700 border border-green-200">Available</span>
+          : <span className="absolute top-3 right-3 rounded-full bg-white px-2 py-1 text-[9px] font-mono uppercase tracking-widest text-gray-400 border border-gray-200">Busy</span>}
+      </div>
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <Monogram name={e.name} size={38} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 text-[15px] font-medium leading-tight truncate">{e.name}{e.verified && <Check size={13} className="text-blue-600 shrink-0" />}</div>
+            <div className="flex items-center gap-1 text-[11px] font-mono text-gray-500"><MapPin size={11} />{e.city}, {e.state}</div>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-1.5"><Stars value={e.rating} /><span className="text-[11px] font-mono text-gray-500">{e.rating} ({e.reviews})</span></div>
+          <div className="text-right"><div className="text-[9px] font-mono uppercase tracking-widest text-gray-400">from</div><div className="text-[14px] font-semibold">{inr(e.start)}</div></div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function Browse({ go, initialCat }) {
+  useReveal('browse');
+  const [cat, setCat] = useState(initialCat || 'all');
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('rating');
+  const [maxPrice, setMaxPrice] = useState(4000);
+
+  let list = ENTREPRENEURS.filter((e) =>
+    (cat === 'all' || e.category === cat) &&
+    e.start <= maxPrice &&
+    (q === '' || (e.name + ' ' + e.craft + ' ' + e.city + ' ' + e.state).toLowerCase().includes(q.toLowerCase()))
+  );
+  list = [...list].sort((a, b) => sort === 'rating' ? b.rating - a.rating : sort === 'priceLow' ? a.start - b.start : b.exp - a.exp);
+
+  return (
+    <div className="min-h-screen">
+      <PageBar go={go} crumb="Browse" />
+      <div className="px-6 md:px-16 py-10">
+        <div className="flex items-end justify-between flex-wrap gap-4" data-reveal>
+          <div>
+            <div className="text-[10px] font-mono tracking-[0.2em] text-gray-500 uppercase">[ Marketplace ]</div>
+            <h1 className="mt-2 text-[2rem] md:text-[3rem] font-medium tracking-tight">Browse local makers</h1>
+          </div>
+          <div className="text-[11px] font-mono text-gray-500">{list.length} of {ENTREPRENEURS.length} makers</div>
+        </div>
+
+        {/* filters */}
+        <div className="mt-8 flex flex-col gap-4" data-reveal>
+          <div className="flex flex-wrap gap-2">
+            {[{ id: 'all', name: 'All' }, ...CATEGORIES].map((c) => (
+              <button key={c.id} onClick={() => setCat(c.id)}
+                className={cn('inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-medium uppercase tracking-wider transition-colors',
+                  cat === c.id ? 'border-black bg-black text-white' : 'border-gray-300 text-gray-700 hover:border-black')}>
+                {c.id !== 'all' && <CatIcon id={c.id} size={13} stroke={2} />}{c.name}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, craft or city…"
+                className="w-full rounded-full border border-gray-300 bg-white pl-9 pr-4 py-2.5 text-[13px] outline-none focus:border-black" />
+            </div>
+            <label className="flex items-center gap-3 text-[11px] font-mono uppercase tracking-widest text-gray-500">
+              Max {inr(maxPrice)}
+              <input type="range" min="60" max="4000" step="20" value={maxPrice} onChange={(e) => setMaxPrice(+e.target.value)} className="accent-black w-32" />
+            </label>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full border border-gray-300 bg-white px-4 py-2.5 text-[12px] outline-none focus:border-black">
+              <option value="rating">Top rated</option>
+              <option value="priceLow">Price: low to high</option>
+              <option value="exp">Most experienced</option>
+            </select>
+          </div>
+        </div>
+
+        {/* grid */}
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" data-reveal>
+          {list.map((e) => <EntCard key={e.id} e={e} go={go} />)}
+        </div>
+        {list.length === 0 && <div className="mt-16 text-center text-gray-400 font-mono text-sm">No makers match those filters.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== profile ============================== */
+function Profile({ go, id }) {
+  useReveal('profile');
+  const e = byId(id) || ENTREPRENEURS[0];
+  const [tab, setTab] = useState('services');
+  const tabs = [{ id: 'services', label: 'Services' }, { id: 'products', label: 'Products' }, { id: 'reviews', label: 'Reviews' }];
+  return (
+    <div className="min-h-screen">
+      <PageBar go={go} crumb={e.name} />
+      {/* cover */}
+      <div className="relative h-44 md:h-60 bg-gray-900 overflow-hidden">
+        <img src={pic('cover-' + e.id, 1600, 500)} alt="" className="w-full h-full object-cover opacity-60" />
+        <button onClick={() => go('browse')} className="absolute top-4 left-6 md:left-16 text-[10px] font-mono uppercase tracking-widest text-white/80 hover:text-white flex items-center gap-1">
+          <ArrowUpRight size={13} className="rotate-[225deg]" /> Back to browse
+        </button>
+      </div>
+      <div className="px-6 md:px-16">
+        {/* avatar overlaps the cover; sits ABOVE the image via z-10 */}
+        <div className="relative z-10 -mt-12 md:-mt-16 w-fit" data-reveal>
+          <Monogram name={e.name} size={96} className="ring-4 ring-[#fcfcfc]" />
+        </div>
+        {/* identity + stats sit fully BELOW the cover, so nothing is clipped */}
+        <div className="mt-4 flex flex-col md:flex-row md:items-start md:justify-between gap-6" data-reveal>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[2rem] md:text-[2.6rem] font-medium tracking-tight leading-tight">{e.name}{e.verified && <Check size={20} className="text-blue-600" />}</div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] font-mono text-gray-600 uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5"><CatIcon id={e.category} size={13} stroke={2} />{e.craft}</span>
+              <span className="inline-flex items-center gap-1"><MapPin size={12} />{e.city}, {e.state}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-8 md:pt-1 shrink-0">
+            <div><div className="text-[10px] font-mono uppercase tracking-widest text-gray-400">Rating</div><div className="flex items-center gap-1.5 mt-1"><Stars value={e.rating} /><span className="text-[13px] font-medium">{e.rating}</span></div></div>
+            <div><div className="text-[10px] font-mono uppercase tracking-widest text-gray-400">Experience</div><div className="text-[15px] font-medium mt-1">{e.exp} yrs</div></div>
+            <div><div className="text-[10px] font-mono uppercase tracking-widest text-gray-400">Status</div><div className={cn('text-[13px] font-medium mt-1', e.available ? 'text-green-700' : 'text-gray-400')}>{e.available ? 'Available' : 'Busy'}</div></div>
+          </div>
+        </div>
+
+        <p className="mt-8 max-w-[720px] text-[15px] leading-[1.7] text-gray-700" data-reveal>{e.bio}</p>
+
+        {/* tabs */}
+        <div className="mt-10 flex gap-8 border-b border-gray-200" data-reveal>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={cn('pb-3 text-[11px] font-mono uppercase tracking-widest transition-colors relative',
+                tab === t.id ? 'text-black' : 'text-gray-400 hover:text-gray-700')}>
+              {t.label}{tab === t.id && <span className="absolute left-0 -bottom-[1px] w-full h-[2px] bg-black" />}
+            </button>
+          ))}
+        </div>
+
+        <div className="py-8 pb-24" data-reveal>
+          {tab === 'services' && (
+            <div className="grid gap-3 max-w-[760px]">
+              {e.services.map((s) => (
+                <div key={s.name} className="flex items-center justify-between border border-gray-200 rounded-lg px-5 py-4 bg-white hover:border-black transition-colors">
+                  <div><div className="text-[15px] font-medium">{s.name}</div><div className="mt-1 flex items-center gap-1 text-[11px] font-mono text-gray-500 uppercase tracking-wide"><Clock size={12} />{s.dur}</div></div>
+                  <div className="flex items-center gap-4"><div className="text-[16px] font-semibold">{inr(s.price)}</div>
+                    <button className="rounded-md bg-[#111] text-white text-[11px] font-mono uppercase tracking-widest px-4 py-2 hover:bg-black">Request</button></div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'products' && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {e.products.map((pr, i) => (
+                <div key={i} className="border border-gray-200 rounded-xl overflow-hidden bg-white hover:border-black transition-colors">
+                  <img src={pic('prod-' + e.id + '-' + i, 500, 500)} alt="" className="w-full h-40 object-cover" />
+                  <div className="p-4"><div className="text-[14px] font-medium leading-tight">{pr.name}</div>
+                    <div className="mt-3 flex items-center justify-between"><span className="text-[15px] font-semibold">{inr(pr.price)}</span>
+                      <button className="rounded-full border border-gray-300 hover:border-black w-8 h-8 flex items-center justify-center"><Plus size={15} /></button></div></div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'reviews' && (
+            <div className="grid gap-4 max-w-[720px]">
+              {[
+                { n: 'Priya S.', r: 5, t: 'Beautiful craftsmanship and delivered on time. Highly recommend!' },
+                { n: 'Arjun M.', r: 5, t: 'Exactly what I wanted. Great communication throughout.' },
+                { n: 'Neha K.', r: 4, t: 'Lovely work, took a day longer than expected but worth it.' },
+              ].map((rv, i) => (
+                <div key={i} className="border border-gray-200 rounded-lg p-5 bg-white">
+                  <div className="flex items-center justify-between"><div className="flex items-center gap-3"><Monogram name={rv.n} size={34} /><span className="text-[14px] font-medium">{rv.n}</span></div><Stars value={rv.r} /></div>
+                  <p className="mt-3 text-[14px] text-gray-700 leading-relaxed">{rv.t}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* sticky CTA */}
+      <div className="sticky bottom-0 border-t border-gray-200 bg-[#fcfcfc]/95 backdrop-blur px-6 md:px-16 py-4 flex items-center justify-between">
+        <div className="text-[13px] text-gray-600"><span className="font-mono text-[11px] uppercase tracking-widest text-gray-400">Starting at </span><span className="font-semibold text-[#111]">{inr(e.start)}</span></div>
+        <button className="rounded-md bg-[#111] text-white px-6 py-3 text-[13px] font-medium hover:bg-black flex items-center gap-2">Place Service Request <ArrowRight size={16} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== dashboard ============================== */
+function Kpi({ icon, label, value, delta }) {
+  return (
+    <div className="border border-gray-200 rounded-xl p-5 bg-white">
+      <div className="flex items-center justify-between text-gray-400">{icon}<span className="text-[10px] font-mono uppercase tracking-widest">{label}</span></div>
+      <div className="mt-4 text-[1.8rem] font-medium tracking-tight">{value}</div>
+      {delta && <div className="mt-1 text-[11px] font-mono text-green-700 flex items-center gap-1"><TrendingUp size={12} />{delta}</div>}
+    </div>
+  );
+}
+
+function Dashboard({ go }) {
+  useReveal('dashboard');
+  const me = byId('ramesh');
+  const [available, setAvailable] = useState(true);
+  const [requests, setRequests] = useState([
+    { id: 1, who: 'Priya Sharma', svc: 'Custom Terracotta Pot', price: 250, when: '2h ago', status: 'pending' },
+    { id: 2, who: 'Arjun Mehta', svc: 'Diwali Diya Set (12 pcs)', price: 120, when: '5h ago', status: 'pending' },
+    { id: 3, who: 'Neha Kapoor', svc: 'Clay Water Bottle', price: 400, when: '1d ago', status: 'pending' },
+  ]);
+  const act = (id, status) => setRequests((rs) => rs.map((r) => (r.id === id ? { ...r, status } : r)));
+
+  return (
+    <div className="min-h-screen bg-[#fcfcfc]">
+      <PageBar go={go} crumb="Dashboard" />
+      <div className="px-6 md:px-16 py-10">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4" data-reveal>
+          <div className="flex items-center gap-4">
+            <Monogram name={me.name} size={56} />
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-gray-500">Entrepreneur Dashboard</div>
+              <div className="text-[1.6rem] font-medium tracking-tight leading-tight">{me.name}</div>
+              <div className="text-[12px] font-mono text-gray-500">{me.craft} · {me.city}</div>
+            </div>
+          </div>
+          <label className="inline-flex items-center gap-3 text-[11px] font-mono uppercase tracking-widest text-gray-600 cursor-pointer select-none">
+            Availability
+            <span onClick={() => setAvailable((a) => !a)} className={cn('relative w-12 h-6 rounded-full transition-colors', available ? 'bg-black' : 'bg-gray-300')}>
+              <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all', available ? 'left-6' : 'left-0.5')} />
+            </span>
+            <span className={available ? 'text-green-700' : 'text-gray-400'}>{available ? 'Open' : 'Paused'}</span>
+          </label>
+        </div>
+
+        {/* KPIs */}
+        <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4" data-reveal>
+          <Kpi icon={<Wallet size={16} />} label="This month" value={inr(18400)} delta="+12% vs last" />
+          <Kpi icon={<Package size={16} />} label="Active orders" value="7" delta="+2 new" />
+          <Kpi icon={<Clock size={16} />} label="Pending requests" value={requests.filter((r) => r.status === 'pending').length} />
+          <Kpi icon={<Star size={16} />} label="Rating" value={me.rating + ' ★'} />
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* requests */}
+          <div className="lg:col-span-2 border border-gray-200 rounded-xl bg-white" data-reveal>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-gray-500">Service requests</span>
+              <span className="text-[11px] font-mono text-gray-400">{requests.filter((r) => r.status === 'pending').length} pending</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {requests.map((r) => (
+                <div key={r.id} className="flex items-center justify-between px-5 py-4 gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Monogram name={r.who} size={38} />
+                    <div className="min-w-0"><div className="text-[14px] font-medium truncate">{r.who}</div><div className="text-[12px] text-gray-500 truncate">{r.svc} · <span className="text-[#111] font-medium">{inr(r.price)}</span></div><div className="text-[10px] font-mono uppercase tracking-widest text-gray-400">{r.when}</div></div>
+                  </div>
+                  {r.status === 'pending' ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => act(r.id, 'accepted')} className="rounded-md bg-[#111] text-white text-[11px] font-mono uppercase tracking-widest px-3 py-2 hover:bg-black flex items-center gap-1"><Check size={13} />Accept</button>
+                      <button onClick={() => act(r.id, 'declined')} className="rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono uppercase tracking-widest px-3 py-2 hover:border-black">Decline</button>
+                    </div>
+                  ) : (
+                    <span className={cn('shrink-0 text-[10px] font-mono uppercase tracking-widest px-3 py-2 rounded-md', r.status === 'accepted' ? 'text-green-700 bg-green-50' : 'text-gray-400 bg-gray-50')}>{r.status}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* listings */}
+          <div className="border border-gray-200 rounded-xl bg-white" data-reveal>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-gray-500">Your listings</span>
+              <button className="w-7 h-7 rounded-full border border-gray-300 hover:border-black flex items-center justify-center"><Plus size={14} /></button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {me.services.map((s) => (
+                <div key={s.name} className="flex items-center justify-between px-5 py-3.5">
+                  <div className="text-[13px] font-medium">{s.name}</div><div className="text-[13px] font-semibold">{inr(s.price)}</div>
+                </div>
+              ))}
+              {me.products.map((p, i) => (
+                <div key={i} className="flex items-center justify-between px-5 py-3.5">
+                  <div className="text-[13px] text-gray-600 flex items-center gap-2"><Package size={13} className="text-gray-400" />{p.name}</div><div className="text-[13px] font-semibold">{inr(p.price)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== app / router ============================== */
+function App() {
+  const [state, setState] = useState({ route: 'home', id: null, cat: null });
+  const go = (route, id = null, cat = null) => { window.scrollTo(0, 0); setState({ route, id: id || state.id, cat }); };
+  const { route, id, cat } = state;
+  return (
+    <div className="font-sans">
+      {route === 'home' && (<><Header route={route} go={go} /><Landing go={go} /></>)}
+      {route === 'browse' && <Browse go={go} initialCat={cat} />}
+      {route === 'profile' && <Profile go={go} id={id} />}
+      {route === 'dashboard' && <Dashboard go={go} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Render Blueprint. In Render: New + → Blueprint → point at this repo,
+# and set the service's Root Directory to "server".
+services:
+  - type: web
+    name: hunarhub-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # Paste your MongoDB Atlas connection string in the Render dashboard (kept secret)
+      - key: MONGODB_URI
+        sync: false
+      # Your deployed frontend origin(s), comma-separated
+      - key: CLIENT_ORIGIN
+        value: https://hunarhub-eight.vercel.app

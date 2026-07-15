@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import { Review } from '../models/Review';
 import { User } from '../models/User';
+import { Order } from '../models/Order';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authRequired, requireRole } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
@@ -39,6 +40,16 @@ router.post(
     const { entrepreneurId, rating, text } = req.body;
     const ent = await User.findOne({ _id: entrepreneurId, role: 'entrepreneur' }).catch(() => null);
     if (!ent) throw new ApiError(404, 'Entrepreneur not found');
+
+    // Earned reviews: only customers with a completed order may review.
+    const hasCompletedOrder = await Order.exists({
+      customer: req.user!.id,
+      entrepreneur: entrepreneurId,
+      status: 'completed',
+    });
+    if (!hasCompletedOrder) {
+      throw new ApiError(403, 'You can only review an entrepreneur after a completed order with them');
+    }
 
     const review = await Review.findOneAndUpdate(
       { entrepreneur: entrepreneurId, customer: req.user!.id },

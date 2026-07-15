@@ -1,21 +1,35 @@
 import 'dotenv/config';
 
-function get(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (value === undefined) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+export const isProd = nodeEnv === 'production';
+
+const INSECURE_JWT = 'dev-secret-change-me';
+
+/**
+ * Read an env var. In production a missing value throws (fail fast) instead of
+ * silently falling back to an insecure default. In development the fallback is
+ * used for convenience.
+ */
+function required(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (value && value.trim().length > 0) return value;
+  if (isProd) throw new Error(`[env] Missing required environment variable in production: ${name}`);
+  return devFallback;
+}
+
+const jwtSecret = required('JWT_SECRET', INSECURE_JWT);
+if (isProd && jwtSecret === INSECURE_JWT) {
+  throw new Error('[env] JWT_SECRET must be set to a strong, unique value in production');
 }
 
 export const env = {
-  nodeEnv: process.env.NODE_ENV ?? 'development',
+  nodeEnv,
   port: Number(process.env.PORT ?? 4000),
-  mongoUri: get('MONGODB_URI', 'mongodb://127.0.0.1:27017/hunarhub'),
-  jwtSecret: get('JWT_SECRET', 'dev-secret-change-me'),
+  mongoUri: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/hunarhub'),
+  jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   clientOrigins: (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
 };
-
-export const isProd = env.nodeEnv === 'production';

@@ -4,16 +4,17 @@ import { ShieldCheck, MapPin, ArrowRight } from 'lucide-react';
 import { Container } from '../ui/Container';
 import { SectionHeading } from '../ui/SectionHeading';
 import { buttonStyles } from '../ui/button';
+import { EntrepreneurCardSkeleton } from '../ui/States';
 import { Monogram } from '../Monogram';
 import { Stars } from '../Stars';
 import { CatIcon } from '../craftIcons';
+import { useEntrepreneurs } from '../../hooks/entrepreneurs';
 import { ENTREPRENEURS } from '../../data/mockData';
 import { cn, inr, pic } from '../../lib/utils';
-import type { Entrepreneur } from '../../types';
+import type { CategoryId } from '../../types';
+import type { EntrepreneurCard } from '../../types/api';
 
-const featured = [...ENTREPRENEURS].sort((a, b) => b.rating - a.rating).slice(0, 4);
-
-function SpotlightCard({ e }: { e: Entrepreneur }) {
+function SpotlightCard({ e }: { e: EntrepreneurCard }) {
   return (
     <Link
       to={`/profile/${e.id}`}
@@ -27,8 +28,8 @@ function SpotlightCard({ e }: { e: Entrepreneur }) {
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
         <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-[9px] font-mono uppercase tracking-widest text-white backdrop-blur">
-          <CatIcon id={e.category} size={11} strokeWidth={2} />
-          {e.craft.split(' ')[0]}
+          <CatIcon id={(e.category ?? 'artisan') as CategoryId} size={11} strokeWidth={2} />
+          {e.craft.split(' ')[0] || 'Maker'}
         </span>
         {e.verified && (
           <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[9px] font-mono uppercase tracking-widest text-accent backdrop-blur">
@@ -68,6 +69,12 @@ function SpotlightCard({ e }: { e: Entrepreneur }) {
 }
 
 export function FeaturedEntrepreneurs() {
+  const { data, isLoading } = useEntrepreneurs({ sort: 'rating' });
+  // Fall back to seed data so the homepage always looks complete.
+  const source: EntrepreneurCard[] = data?.entrepreneurs && data.entrepreneurs.length > 0 ? data.entrepreneurs : ENTREPRENEURS;
+  const featured = source.slice(0, 4);
+  const showSkeleton = isLoading && !data;
+
   return (
     <section className="border-y border-gray-100 bg-white py-16 md:py-24">
       <Container>
@@ -82,17 +89,19 @@ export function FeaturedEntrepreneurs() {
           </Link>
         </div>
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {featured.map((e, i) => (
-            <motion.div
-              key={e.id}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.5, delay: i * 0.06 }}
-            >
-              <SpotlightCard e={e} />
-            </motion.div>
-          ))}
+          {showSkeleton
+            ? Array.from({ length: 4 }).map((_, i) => <EntrepreneurCardSkeleton key={i} />)
+            : featured.map((e, i) => (
+                <motion.div
+                  key={e.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-60px' }}
+                  transition={{ duration: 0.5, delay: i * 0.06 }}
+                >
+                  <SpotlightCard e={e} />
+                </motion.div>
+              ))}
         </div>
         <div className="mt-8 sm:hidden">
           <Link to="/browse" className={buttonStyles({ variant: 'ghost', size: 'md', className: 'w-full' })}>

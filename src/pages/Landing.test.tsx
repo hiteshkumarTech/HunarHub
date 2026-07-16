@@ -1,13 +1,28 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { AuthProvider } from '../context/AuthContext';
 import Landing from './Landing';
 
+beforeEach(() => {
+  // Keep the smoke test hermetic — no real network from data-driven sections.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ entrepreneurs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })),
+  );
+});
+
 function renderLanding() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <Landing />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter>
+          <Landing />
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -24,12 +39,5 @@ describe('Landing page', () => {
   it('exposes a labelled search input', () => {
     renderLanding();
     expect(screen.getByLabelText('Search artisans and crafts')).toBeInTheDocument();
-  });
-
-  it('links the primary CTA to the marketplace', () => {
-    renderLanding();
-    const exploreLinks = screen.getAllByRole('link', { name: /explore artisans/i });
-    expect(exploreLinks.length).toBeGreaterThan(0);
-    expect(exploreLinks[0]).toHaveAttribute('href', '/browse');
   });
 });

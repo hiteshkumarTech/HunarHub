@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, type Variants } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { UserMenu } from './UserMenu';
 
 const NAV = [
   { label: 'Discover', to: '/' },
   { label: 'Artisans', to: '/browse' },
   { label: 'Products', to: '/browse' },
-  { label: 'Sell', to: '/dashboard' },
+  { label: 'Sell', to: '/register' },
   { label: 'About', to: '/' },
 ];
 
@@ -28,6 +29,16 @@ export function Header() {
       variants={{ animate: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } } }}
       className="relative z-20 pt-6 px-6 md:px-16"
     >
+      {/* utility bar: auth actions */}
+      <div className="flex items-center justify-between pb-2">
+        <span className="hidden text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 sm:inline">
+          Local craft marketplace
+        </span>
+        <div className="ml-auto">
+          <UserMenu />
+        </div>
+      </div>
+
       {/* wordmark */}
       <div className="overflow-hidden">
         <motion.h1

@@ -1,14 +1,19 @@
 import { Link } from 'react-router-dom';
+import { UserMenu } from './UserMenu';
 
 export function PageBar({ crumb }: { crumb?: string }) {
   return (
-    <div className="px-6 md:px-16 pt-6 pb-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-[#fcfcfc]/90 backdrop-blur z-40">
-      <Link to="/" className="text-[15px] font-semibold tracking-[-0.02em]">HunarHub</Link>
-      <nav className="flex items-center gap-6 text-[10px] font-mono uppercase tracking-widest text-gray-600">
-        <Link to="/browse" className="hover:text-black">Browse</Link>
-        <Link to="/dashboard" className="hover:text-black">Sell</Link>
-        {crumb && <span className="hidden md:inline text-gray-400">{crumb}</span>}
-      </nav>
+    <div className="sticky top-0 z-40 flex items-center justify-between border-b border-gray-200 bg-[#fcfcfc]/90 px-6 pb-4 pt-5 backdrop-blur md:px-16">
+      <div className="flex items-center gap-6">
+        <Link to="/" className="text-[15px] font-semibold tracking-[-0.02em]">
+          HunarHub
+        </Link>
+        <Link to="/browse" className="text-[11px] font-mono uppercase tracking-widest text-gray-600 hover:text-black">
+          Browse
+        </Link>
+        {crumb && <span className="hidden text-[11px] font-mono uppercase tracking-widest text-gray-400 md:inline">{crumb}</span>}
+      </div>
+      <UserMenu />
     </div>
   );
 }

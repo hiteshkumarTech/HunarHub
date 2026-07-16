@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowRight, ArrowUpRight, Plus, MapPin, Check, Clock } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Plus, MapPin, Check, Clock, X } from 'lucide-react';
 import { PageBar } from '../components/PageBar';
 import { Monogram } from '../components/Monogram';
 import { Stars } from '../components/Stars';
 import { CatIcon } from '../components/craftIcons';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { EntrepreneurCardTile } from '../components/EntrepreneurCardTile';
 import { Skeleton, ErrorState, EmptyState } from '../components/ui/States';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../context/AuthContext';
-import { useEntrepreneur } from '../hooks/entrepreneurs';
+import { useEntrepreneur, useEntrepreneurs } from '../hooks/entrepreneurs';
 import { useCreateOrder } from '../hooks/orders';
+import { pushRecentlyViewed } from '../lib/recentlyViewed';
 import { cn, inr, pic } from '../lib/utils';
 import type { CategoryId } from '../types';
 import type { ProductItem, ReviewItem, ServiceItem } from '../types/api';
@@ -31,7 +34,16 @@ export default function Profile() {
   const { toast } = useToast();
   const createOrder = useCreateOrder();
   const { data, isLoading, isError, error, refetch } = useEntrepreneur(id);
+  const similar = useEntrepreneurs({ cat: data?.entrepreneur.category ?? undefined, sort: 'rating' });
   const [tab, setTab] = useState<TabId>('services');
+  const [lightbox, setLightbox] = useState<ProductItem | null>(null);
+
+  useEffect(() => {
+    if (data?.entrepreneur) {
+      const en = data.entrepreneur;
+      pushRecentlyViewed({ id: en.id, name: en.name, craft: en.craft, city: en.city, category: en.category });
+    }
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -60,6 +72,7 @@ export default function Profile() {
   }
 
   const { entrepreneur: e, services, products, reviews } = data;
+  const similarList = (similar.data?.entrepreneurs ?? []).filter((x) => x.id !== e.id).slice(0, 4);
 
   const requireCustomer = (): boolean => {
     if (!user) {
@@ -89,7 +102,10 @@ export default function Profile() {
     createOrder.mutate(
       { entrepreneurId: e.id, kind: 'product', itemId: p.id },
       {
-        onSuccess: () => toast(`Order placed with ${e.name} for “${p.name}”.`, 'success'),
+        onSuccess: () => {
+          setLightbox(null);
+          toast(`Order placed with ${e.name} for “${p.name}”.`, 'success');
+        },
         onError: (err) => toast(err instanceof Error ? err.message : 'Could not place order.', 'error'),
       },
     );
@@ -117,6 +133,7 @@ export default function Profile() {
             <div className="flex items-center gap-2 text-[2rem] font-medium leading-tight tracking-tight md:text-[2.6rem]">
               {e.name}
               {e.verified && <Check size={20} className="text-blue-600" />}
+              <FavoriteButton entrepreneurId={e.id} size={18} className="ml-1 h-9 w-9 self-center" />
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] font-mono uppercase tracking-wide text-gray-600">
               <span className="inline-flex items-center gap-1.5">
@@ -169,7 +186,7 @@ export default function Profile() {
           ))}
         </div>
 
-        <div className="py-8 pb-28">
+        <div className="py-8">
           {tab === 'services' &&
             (services.length === 0 ? (
               <EmptyState title="No services listed yet" />
@@ -206,7 +223,9 @@ export default function Profile() {
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {products.map((p) => (
                   <div key={p.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors hover:border-black">
-                    <img src={p.image || pic(`prod-${p.id}`, 500, 500)} alt={p.name} loading="lazy" className="h-40 w-full object-cover" />
+                    <button type="button" onClick={() => setLightbox(p)} className="block w-full cursor-zoom-in" aria-label={`View ${p.name}`}>
+                      <img src={p.image || pic(`prod-${p.id}`, 500, 500)} alt={p.name} loading="lazy" className="h-40 w-full object-cover" />
+                    </button>
                     <div className="p-4">
                       <div className="text-[14px] font-medium leading-tight">{p.name}</div>
                       <div className="mt-3 flex items-center justify-between">
@@ -246,6 +265,18 @@ export default function Profile() {
               </div>
             ))}
         </div>
+
+        {similarList.length > 0 && (
+          <div className="border-t border-gray-100 py-10">
+            <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent">More like this</div>
+            <h2 className="mt-2 text-[1.4rem] font-semibold tracking-tight">Similar makers</h2>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {similarList.map((s) => (
+                <EntrepreneurCardTile key={s.id} e={s} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="sticky bottom-0 flex items-center justify-between border-t border-gray-200 bg-[#fcfcfc]/95 px-6 py-4 backdrop-blur md:px-16">
@@ -257,6 +288,38 @@ export default function Profile() {
           Request a service <ArrowRight size={16} />
         </button>
       </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.name}
+          onClick={() => setLightbox(null)}
+        >
+          <div className="max-w-lg overflow-hidden rounded-2xl bg-white" onClick={(ev) => ev.stopPropagation()}>
+            <img src={lightbox.image || pic(`prod-${lightbox.id}`, 800, 800)} alt={lightbox.name} className="max-h-[70vh] w-full object-contain" />
+            <div className="flex items-center justify-between gap-4 p-4">
+              <div>
+                <div className="text-[15px] font-medium">{lightbox.name}</div>
+                <div className="text-[14px] font-semibold">{inr(lightbox.price)}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => buyProduct(lightbox)}
+                  disabled={createOrder.isPending}
+                  className="rounded-md bg-[#111] px-4 py-2 text-[12px] font-medium text-white hover:bg-black disabled:opacity-50"
+                >
+                  Order
+                </button>
+                <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 hover:border-black">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

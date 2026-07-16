@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, LayoutDashboard } from 'lucide-react';
+import { LogOut, LayoutDashboard, Heart } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { buttonStyles } from './ui/button';
 import { cn } from '../lib/utils';
@@ -28,6 +28,11 @@ export function UserMenu({ variant = 'light' }: { variant?: 'light' | 'dark' }) 
       {user.role === 'entrepreneur' && (
         <Link to="/dashboard" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
           <LayoutDashboard size={15} /> Dashboard
+        </Link>
+      )}
+      {user.role === 'customer' && (
+        <Link to="/favourites" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
+          <Heart size={15} /> Saved
         </Link>
       )}
       <span className={cn('hidden text-[13px] sm:inline', variant === 'dark' ? 'text-white/70' : 'text-gray-500')}>

@@ -16,13 +16,15 @@ const router = Router();
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { cat, q, maxPrice, sort } = req.query;
+    const { cat, q, maxPrice, sort, verified, available } = req.query;
     const filter: Record<string, unknown> = { role: 'entrepreneur' };
 
     if (cat && (CATEGORY_IDS as readonly string[]).includes(String(cat))) {
       filter['profile.category'] = cat;
     }
     if (maxPrice) filter['profile.startingPrice'] = { $lte: Number(maxPrice) };
+    if (verified === 'true') filter['profile.verified'] = true;
+    if (available === 'true') filter['profile.available'] = true;
     if (q) {
       const rx = new RegExp(String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filter.$or = [{ name: rx }, { 'profile.craft': rx }, { 'profile.city': rx }, { 'profile.state': rx }];
@@ -35,8 +37,22 @@ router.get(
     };
     const sortBy = sortMap[String(sort)] ?? sortMap.rating;
 
-    const users = await User.find(filter).sort(sortBy).limit(100);
-    res.json({ entrepreneurs: users.map(entrepreneurCard) });
+    // Pagination (backward compatible: defaults return the first page).
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(48, Math.max(1, Number(req.query.limit) || 12));
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      User.find(filter).sort(sortBy).skip(skip).limit(limit),
+      User.countDocuments(filter),
+    ]);
+
+    res.json({
+      entrepreneurs: users.map(entrepreneurCard),
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    });
   }),
 );
 

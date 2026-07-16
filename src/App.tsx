@@ -5,6 +5,7 @@ import Profile from './pages/Profile';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Favourites from './pages/Favourites';
 import { RequireAuth } from './components/RequireAuth';
 
 export default function App() {
@@ -21,6 +22,14 @@ export default function App() {
           element={
             <RequireAuth role="entrepreneur">
               <Dashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/favourites"
+          element={
+            <RequireAuth role="customer">
+              <Favourites />
             </RequireAuth>
           }
         />

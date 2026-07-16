@@ -96,6 +96,13 @@ export interface ReviewItem {
 
 export interface EntrepreneursResponse {
   entrepreneurs: EntrepreneurCard[];
+  total?: number;
+  page?: number;
+  pages?: number;
+}
+
+export interface FavoritesResponse {
+  entrepreneurs: EntrepreneurCard[];
 }
 
 export interface EntrepreneurDetailResponse {

@@ -4,6 +4,11 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Single restrained accent — terracotta, echoing clay & pottery.
+     Enables bg-accent / text-accent / border-accent / ring-accent (+ /opacity). */
+  --color-accent: #c2410c;
+  --color-accent-fg: #ffffff;
 }
 
 @layer utilities {
@@ -21,3 +26,15 @@ html, body {
 }
 body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 ::selection { background: #000; color: #fff; }
+
+html { scroll-behavior: smooth; }
+
+/* Accessibility: honour users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

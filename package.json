@@ -30,7 +30,7 @@
     "@types/react-dom": "^19.0.1",
     "@vitejs/plugin-react": "^5.0.4",
     "jsdom": "^25.0.1",
-    "tailwindcss": "^4.1.14",
+    "tailwindcss": "^4.3.3",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
     "vitest": "^2.1.8"

@@ -53,7 +53,7 @@ jobs:
       # on first use. Caching it across runs avoids re-downloading ~100MB+ every time;
       # the key is pinned to the exact MongoDB version below, so a version bump
       # naturally invalidates the cache instead of silently reusing a stale binary.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-8.2.6

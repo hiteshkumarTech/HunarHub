@@ -60,3 +60,32 @@ export function reviewJson(r: any) {
     createdAt: r.createdAt,
   };
 }
+
+/** Admin-only: any user (customer/entrepreneur/admin) with enough detail for a management table. */
+export function adminUserJson(u: any) {
+  return {
+    id: u._id.toString(),
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    profile: u.profile ?? null,
+    createdAt: u.createdAt,
+  };
+}
+
+/** Admin-only: a service or product with its owner attached, for a cross-seller listing table. */
+export function adminListingJson(item: any, kind: 'service' | 'product') {
+  return {
+    id: item._id.toString(),
+    kind,
+    name: item.name,
+    price: item.price,
+    dur: kind === 'service' ? item.dur ?? '' : undefined,
+    image: kind === 'product' ? item.image ?? '' : undefined,
+    entrepreneur:
+      item.entrepreneur && item.entrepreneur.name
+        ? { id: item.entrepreneur._id.toString(), name: item.entrepreneur.name }
+        : { id: item.entrepreneur?.toString(), name: 'Unknown' },
+    createdAt: item.createdAt,
+  };
+}

@@ -23,9 +23,23 @@ REST backend for HunarHub. **Express 4 · Mongoose 8 · JWT auth · Zod validati
 | `GET` | `/api/reviews/entrepreneur/:id` | — | An entrepreneur's reviews |
 | `GET` | `/api/admin/entrepreneurs` | admin | All entrepreneurs |
 | `PATCH` | `/api/admin/entrepreneurs/:id/verify` | admin | Verify / unverify |
-| `GET` | `/api/admin/stats` | admin | Platform counts |
+| `GET` | `/api/admin/users` | admin | Every account, any role (`?role=&q=&page=`) |
+| `GET` | `/api/admin/listings` | admin | Services + products across every seller (`?kind=&q=&page=`) |
+| `DELETE` | `/api/admin/services/:id` `/api/admin/products/:id` | admin | Moderation removal (no ownership check) |
+| `GET` | `/api/admin/stats` | admin | Platform counts (users, listings, orders — all real queries) |
 
 Send the token as `Authorization: Bearer <token>`.
+
+## Tests
+
+```bash
+npm test          # vitest + supertest + mongodb-memory-server — no real database touched
+npm run typecheck
+```
+
+Covers auth (register/login/session), role authorization (customer/entrepreneur rejected from admin routes),
+listing ownership (an entrepreneur can't edit or delete another seller's service/product), the order lifecycle
+and cross-seller isolation, and the earned-review rule. Each suite gets its own in-memory MongoDB instance.
 
 ## Run locally
 

@@ -43,7 +43,8 @@ Password for both: `password123`.
 | Role | Email | Try |
 |---|---|---|
 | Customer | `priya@example.com` | Browse → open a profile → request a service → `/orders` to track it and leave a review once it's completed |
-| Entrepreneur | `ramesh@hunarhub.in` | `/dashboard` → accept/decline requests → mark complete → toggle availability |
+| Entrepreneur | `ramesh@hunarhub.in` | `/dashboard` → accept/decline requests → mark complete → toggle availability → manage listings |
+| Admin | `admin@hunarhub.in` | `/admin` → platform metrics, user directory, cross-seller listing moderation |
 
 ## Architecture
 
@@ -90,18 +91,22 @@ Browser (Vercel)                          API (Render)                    MongoD
 ```
 src/
 ├─ main.tsx                 # app entry — providers (Theme, Query, Auth, Toast) + BrowserRouter
-├─ App.tsx                  # routes; Profile/Dashboard/Login/Register/Favourites/MyOrders are code-split
+├─ App.tsx                  # routes; everything but Landing/Browse is code-split
 ├─ index.css                # Tailwind 4 theme — fonts, color tokens, dark-mode variables, focus-visible
 ├─ types.ts, types/api.ts   # shared TypeScript types (frontend shapes; mirror the API's serializers)
 ├─ lib/                     # api.ts (fetch client), queryClient.ts, utils.ts, recentlyViewed.ts
-├─ hooks/                   # entrepreneurs, orders, favorites, reviews — one TanStack Query hook module each
+├─ hooks/                   # entrepreneurs, orders, favorites, reviews, listings, admin — one module each
 ├─ context/                 # AuthContext, ThemeContext
 ├─ data/mockData.ts         # seed/fallback data (landing page graceful-degrades to this if the API is cold)
 ├─ components/
-│  ├─ ui/                   # Button, Card, Badge, Avatar, Tabs, StatusBadge, Toast, States, Field, ThemeToggle
+│  ├─ ui/                   # Button, Card, Badge, Avatar, Tabs, StatusBadge, Toast, States, Field, Kpi,
+│  │                         # ConfirmAction, ThemeToggle
 │  ├─ landing/               # HeroSection, FeaturedEntrepreneurs, TrendingProducts, Testimonials, …
+│  ├─ admin/                 # AdminOverview, AdminUsersPanel, AdminListingsPanel (used by /admin)
+│  ├─ dashboard/             # ListingsManager — entrepreneur's own create/edit/delete UI
 │  └─ auth/AuthShell.tsx     # shared Login/Register shell
-└─ pages/                   # Landing, Browse, Profile, Dashboard, Login, Register, Favourites, MyOrders
+└─ pages/                   # Landing, Browse, Profile, Dashboard, Login, Register, Favourites, MyOrders,
+                             # AdminDashboard
 
 server/
 ├─ src/
@@ -111,6 +116,7 @@ server/
 │  ├─ models/                # User (embeds entrepreneur profile), Order, Review, Service, Product, Favorite
 │  ├─ routes/                # auth, entrepreneurs, services, products, orders, reviews, favorites, admin
 │  ├─ utils/                 # ApiError, asyncHandler, serialize (Mongoose doc → API JSON), token
+│  ├─ test/                  # db.ts (in-memory MongoDB harness), fixtures.ts (seed users + tokens)
 │  └─ seed/seed.ts           # demo data incl. the accounts above
 └─ render.yaml               # Render Blueprint (see Deployment)
 ```
@@ -125,9 +131,10 @@ server/
 | `/browse` | Public | Marketplace — category/search/price/verified/available filters, sort, infinite pagination |
 | `/profile/:id` | Public | Entrepreneur profile — services/products/reviews tabs, request/buy, favourite |
 | `/login`, `/register` | Public | Auth — register collects craft/location for the entrepreneur role |
-| `/dashboard` | Entrepreneur | KPIs, incoming requests (accept/decline/complete), availability toggle, listings |
+| `/dashboard` | Entrepreneur | KPIs, incoming requests (accept/decline/complete), availability toggle, manage own listings |
 | `/orders` | Customer | Order history, status timeline, leave a review after completion |
 | `/favourites` | Customer | Saved entrepreneurs |
+| `/admin` | Admin | Platform metrics, user directory (search/filter, verify entrepreneurs), cross-seller listing moderation |
 
 ### API (`server`, mounted under `/api`)
 
@@ -146,20 +153,31 @@ server/
 | `POST /reviews` | Customer | Earned review — requires a completed order with that entrepreneur |
 | `GET /reviews/entrepreneur/:id` | — | Public review list |
 | `GET/POST /favorites`, `DELETE /favorites/:id` | Customer | Wishlist |
-| `GET /admin/entrepreneurs`, `PATCH /admin/entrepreneurs/:id/verify`, `GET /admin/stats` | Admin | Verification + platform stats |
+| `GET /admin/entrepreneurs`, `PATCH /admin/entrepreneurs/:id/verify` | Admin | Entrepreneur list + verification |
+| `GET /admin/users` | Admin | Every account, any role (`role`, `q`, `page` filters) |
+| `GET /admin/listings` | Admin | Services + products across every seller (`kind`, `q`, `page` filters) |
+| `DELETE /admin/services/:id`, `DELETE /admin/products/:id` | Admin | Moderation removal — no ownership check |
+| `GET /admin/stats` | Admin | Platform counts — users, listings, orders (all real queries, no fabricated numbers) |
 | `GET /health` | — | Liveness check (used by Render) |
 
 ## Testing
 
 ```bash
-npm test          # frontend — Vitest + Testing Library
-cd server && npm run typecheck   # backend has no test suite yet — typecheck is the current safety net
+npm test               # frontend — Vitest + Testing Library
+cd server && npm test  # backend — Vitest + Supertest + mongodb-memory-server (in-memory, never a real DB)
 ```
 
 Frontend coverage: `lib/api.test.ts` (fetch client / error normalisation), `lib/recentlyViewed.test.ts`,
 `pages/Landing.test.tsx` (smoke test — every marketing section renders), `components/ui/StatusBadge.test.tsx`,
-`components/ui/Tabs.test.tsx` (ARIA roles + keyboard nav). A Supertest suite against the API routes is the
-natural next addition — see [ROADMAP.md](./ROADMAP.md).
+`components/ui/Tabs.test.tsx` (ARIA roles + keyboard nav).
+
+Backend coverage (40 tests, `server/src/routes/*.test.ts`) prioritises the highest-risk behavior over line
+coverage: auth (register/login/session, can't self-register as admin), role authorization (customer/entrepreneur
+rejected from admin routes), listing ownership (an entrepreneur can edit/delete their own service or product but
+gets a 403 touching another seller's — verified against the DB state, not just the response code), the order
+lifecycle and cross-seller isolation, the earned-review rule, and the new admin routes (stats reflect real counts,
+not fabricated numbers; moderation delete; role/search filters). Each suite boots its own in-memory MongoDB
+instance via `mongodb-memory-server` — nothing here ever touches a real database, local or production.
 
 ## Deployment
 
@@ -169,11 +187,11 @@ Atlas. Required env vars are in `.env.example` (frontend) and `server/.env.examp
 
 ## Where things stand
 
-M1–M5 are shipped: live API + auth, orders + dashboard, discovery (favourites/pagination/filters/recently
-viewed), and a design-system pass (dark mode, accessible Tabs, shared primitives). This QA/polish pass added:
-a keyboard-accessible skip link + `<main>` landmarks on every screen, ARIA fixes (toast urgency, decorative
-star ratings, distinct social-link labels, hamburger `aria-expanded`), route-level code splitting, `.lean()` +
-compound indexes on the hot read paths, and fixed a handful of pre-existing gaps this pass turned up (a broken
-`typecheck` script, a Landing test missing `ThemeProvider`, an uninstalled test dependency, a TS overload error
-in the order-creation route). Remaining work — payments, image uploads, messaging, i18n, CI, observability — is
-tracked in [ROADMAP.md](./ROADMAP.md).
+M1–M5 shipped live API + auth, orders + dashboard, discovery, and a design-system pass. A QA/polish pass then
+added accessibility (skip links, landmarks, ARIA fixes), performance (code splitting, `.lean()` + compound
+indexes), and this documentation. Most recently: an **admin dashboard** (`/admin` — platform metrics, user
+directory, cross-seller listing moderation, all backed by real new endpoints, not a frontend-only view), a
+**seller listing manager** (entrepreneurs create/edit/delete their own services and products from `/dashboard`
+without touching a database console), and a **backend test suite** (40 tests covering auth, role authorization,
+listing ownership, and the order lifecycle — see [Testing](#testing)). Remaining work — payments, image uploads,
+messaging, i18n, CI, observability — is tracked in [ROADMAP.md](./ROADMAP.md).

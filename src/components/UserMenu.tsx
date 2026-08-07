@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Heart, Package } from 'lucide-react';
+import { LogOut, LayoutDashboard, Heart, Package, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { buttonStyles } from './ui/button';
 import { ThemeToggle } from './ui/ThemeToggle';
@@ -42,6 +42,11 @@ export function UserMenu({ variant = 'light' }: { variant?: 'light' | 'dark' }) 
             <Heart size={15} /> Saved
           </Link>
         </>
+      )}
+      {user.role === 'admin' && (
+        <Link to="/admin" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
+          <ShieldCheck size={15} /> Admin
+        </Link>
       )}
       <span className={cn('hidden text-[13px] sm:inline', variant === 'dark' ? 'text-white/70' : 'text-gray-500')}>
         Hi, {user.name.split(' ')[0]}

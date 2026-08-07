@@ -4,12 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "description": "HunarHub REST API — Express + MongoDB (Mongoose), JWT auth, roles, orders, reviews.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -31,6 +34,10 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.5",
-    "typescript": "~5.8.2"
+    "@types/supertest": "^7.2.1",
+    "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.2.2",
+    "typescript": "~5.8.2",
+    "vitest": "^4.1.10"
   }
 }

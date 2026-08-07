@@ -128,3 +128,52 @@ export interface OrderItem {
 export interface OrdersResponse {
   orders: OrderItem[];
 }
+
+/** Admin-only: any account, any role. */
+export interface AdminUserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  profile: EntrepreneurProfile | null;
+  createdAt: string;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserItem[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+/** Admin-only: a service or product with its seller attached. */
+export interface AdminListingItem {
+  id: string;
+  kind: 'service' | 'product';
+  name: string;
+  price: number;
+  dur?: string;
+  image?: string;
+  entrepreneur: PersonRef;
+  createdAt: string;
+}
+
+export interface AdminListingsResponse {
+  listings: AdminListingItem[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  entrepreneurs: number;
+  customers: number;
+  admins: number;
+  totalOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+  reviews: number;
+  totalListings: number;
+  activeListings: number;
+}

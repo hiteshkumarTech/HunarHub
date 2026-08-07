@@ -13,6 +13,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Favourites = lazy(() => import('./pages/Favourites'));
 const MyOrders = lazy(() => import('./pages/MyOrders'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
 function RouteFallback() {
   return (
@@ -53,6 +54,14 @@ export default function App() {
             element={
               <RequireAuth role="customer">
                 <MyOrders />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth role="admin">
+                <AdminDashboard />
               </RequireAuth>
             }
           />

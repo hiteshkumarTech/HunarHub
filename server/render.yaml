@@ -6,12 +6,17 @@ services:
     runtime: node
     plan: free
     rootDir: server
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      # Pinned to match CI (.github/workflows/ci.yml) — without this, Render
+      # falls back to its platform default, which can silently drift out of
+      # sync with the Node version every push is actually tested against.
+      - key: NODE_VERSION
+        value: "22"
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN

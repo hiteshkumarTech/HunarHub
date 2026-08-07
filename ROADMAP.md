@@ -1,8 +1,9 @@
 # HunarHub — Roadmap
 
 _Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), an admin +
-listing-management + backend-tests pass, and a CI + repository-portability pass. Supersedes the original
-pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's actually left._
+listing-management + backend-tests pass, a CI + repository-portability pass, and a production deployment
+verification pass. Supersedes the original pre-M1 audit — most of P0 and P1 below are now done; this file
+tracks what's actually left._
 
 ## Done
 
@@ -60,41 +61,89 @@ pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's a
 - ✅ `.github/dependabot.yml` — weekly, PR-only updates for both npm ecosystems (`/`, `/server`) and the
   workflow's own `actions/*` versions.
 
+**Production deployment verification**
+- ✅ **Confirmed CI actually passed remotely** — queried GitHub's public check-runs API directly (no `gh`
+  install needed) rather than assuming green from a local run; both `frontend` and `backend` jobs showed
+  `conclusion: success` on the deployed commit.
+- ✅ **Full HTTP-level smoke test against the real production URLs** — Vercel frontend, Render API, Atlas
+  database, all live. Verified: health check, real (non-empty) listing data, registration, login, session
+  restore, invalid-credential rejection, every role-authorization boundary (customer → 403 on admin and
+  entrepreneur-only routes, unauthenticated → 401 on protected routes), listing detail view, favourite/
+  unfavourite, a full order lifecycle (create → visible to seller → status transition → resolved), a
+  temporary listing create/edit/verify/delete cycle, and the admin stats/users/listings endpoints. CORS
+  preflight tested from the actual deployed frontend origin. Security headers, error-response shape (no
+  stack traces/connection strings/file paths leaked), and Render's documented cold-start behavior all
+  confirmed directly, not assumed from the code.
+- ✅ **Fixed an active production security issue** — the seeded admin account (`admin@hunarhub.in`) shared
+  the same public demo password documented in the README. Confirmed this credential currently grants live
+  admin access (a non-destructive login check), then fixed the root cause: `seed.ts` no longer hardcodes an
+  admin password (generates one, or reads `ADMIN_SEED_PASSWORD`), and a new `set-admin-password` script lets
+  the password be rotated on an already-seeded database — including production — without wiping anything
+  else. The actual production rotation is a manual step for whoever holds the Atlas credentials (documented
+  in `DEPLOY-CHECKLIST.md`) — this session never had access to the production `MONGODB_URI` and couldn't
+  have performed it directly even if that were the right call.
+- ✅ Pinned `NODE_VERSION: "22"` and switched `buildCommand` to `npm ci` in `server/render.yaml`, matching
+  CI exactly. (Requires a manual Blueprint sync in the Render dashboard for the *already-existing* service —
+  `render.yaml` changes don't auto-apply to a service created before the change.)
+- ✅ Resolved a documentation-drift bug in this file: a prior `npm audit` summary stated "7 vulnerabilities"
+  but its prose breakdown only listed 6 (misclassifying `vite`'s own advisories as part of the "moderate"
+  group instead of `vite`'s actual `high` severity, and omitting `vite-node` entirely). Re-ran the audit and
+  reconciled it — see the updated breakdown below.
+
+## ⚠️ One manual action still required
+
+Production's admin password needs rotating — the fix shipped in code this pass, but the actual rotation
+needs the live `MONGODB_URI`, which no automated session has ever had access to. One command, documented at
+the top of `DEPLOY-CHECKLIST.md`. Do this before treating the deployment as fully secured.
+
 ## Remaining (highest → lowest priority)
 
 ### P2 — trust, quality, developer experience
 1. **Account activation/deactivation** — the admin Users panel intentionally does *not* have a
    suspend/ban action: `User` has no `active`/`disabled` field, and adding one properly means also enforcing
    it at login (not just hiding a UI button). Real, scoped follow-up rather than a fake toggle.
-2. **Order status-transition rules** — `PATCH /orders/:id/status` currently accepts any enum value from
+2. **No account deletion, anywhere** — found while smoke-testing M8: there is no endpoint for a user to
+   delete their own account, nor for an admin to remove another user. Every account created while testing —
+   including the disposable smoke-test customer from this pass — is permanent. Worth adding both a
+   self-service delete and an admin-driven one; until then, keep test-account creation against production to
+   the minimum needed.
+3. **Order status-transition rules** — `PATCH /orders/:id/status` currently accepts any enum value from
    `accepted`/`declined`/`completed` regardless of the order's current status (e.g. a `declined` order could
    technically be moved to `completed`). No business rule exists for this today, so nothing enforces or tests
    it; worth a small state machine if this starts mattering.
-3. **Shared types / typed client** — `src/types/api.ts` (frontend) and the Mongoose models (backend) are
+4. **Shared types / typed client** — `src/types/api.ts` (frontend) and the Mongoose models (backend) are
    hand-kept in sync. Low risk at current size; worth a generator (tRPC-style or OpenAPI) if the schema churns.
-4. **Observability** — structured logs (`morgan` only today), error tracking (Sentry), a readiness probe
+5. **Observability** — structured logs (`morgan` only today), error tracking (Sentry), a readiness probe
    beyond `/health`.
-5. **`/api/v1` versioning** before any external consumer exists.
-6. **npm audit deferrals** — root has 7 advisories, all either dev-tooling-only (an esbuild/vite chain
-   pulled in transitively by `vitest`, and a critical-but-inapplicable `vitest --ui` RCE — this project never
-   runs `--ui`) or a `react-router` CSRF advisory specific to RSC mode (this is a plain SPA, not using RSC)
-   whose fix needs a v8 major bump. Server audit is clean (0 advisories). None are safely fixable without a
-   major version bump, so none were forced — see the CI pass's final report for the full classification.
+6. **`/api/v1` versioning** before any external consumer exists.
+7. **npm audit deferrals** — root has exactly 7 advisories (1 critical + 3 high + 3 moderate — verified via
+   `npm audit --json`, not eyeballed):
+   - **Critical**: `vitest` — arbitrary file read/execute when `vitest --ui` is listening. This project has
+     no `--ui` script and no `@vitest/ui` dependency — not reachable in this project's actual usage.
+   - **High**: `react-router` + `react-router-dom` (direct prod dependency) — RSC-mode CSRF bypass; this is
+     a plain client-rendered SPA, not using React Server Components. Also **high**: `vite` (transitive,
+     dev-only) — three rolled-up advisories (optimized-deps path traversal, a Windows-only `launch-editor`
+     NTLMv2 hash disclosure, a `server.fs.deny` bypass).
+   - **Moderate**: `esbuild`, `@vitest/mocker`, `vite-node` — all transitive, all dev-tooling-only, all part
+     of the same old-`vitest`-pulls-old-`vite` chain.
+   - All 7 require a `vitest`/`vite` major bump (v2→v4) or `react-router` v8 to clear — server audit is
+     clean (0 advisories) and none of these are exploitable in how this project actually runs, so none were
+     forced. Fixing them is a deliberate, separate dependency-upgrade task, not a deployment blocker.
 
 ### P3 — growth features
-7. **Payments** (Razorpay for India) with hold/escrow on service completion.
-8. **Image uploads** via Cloudinary/S3 (products, profile, cover) — replaces Picsum.
-9. **Notifications** (email via Resend/SES; in-app) and **messaging** between customer and entrepreneur.
-10. **SEO/social** — per-page meta/OG tags, sitemap; consider prerendering entrepreneur profile pages.
+8. **Payments** (Razorpay for India) with hold/escrow on service completion.
+9. **Image uploads** via Cloudinary/S3 (products, profile, cover) — replaces Picsum.
+10. **Notifications** (email via Resend/SES; in-app) and **messaging** between customer and entrepreneur.
+11. **SEO/social** — per-page meta/OG tags, sitemap; consider prerendering entrepreneur profile pages.
 
 ### P4 — scale & polish
-11. **Full-text search** — swap the regex `$or` on Browse for `$text` (index already exists, unused) or
+12. **Full-text search** — swap the regex `$or` on Browse for `$text` (index already exists, unused) or
     Atlas Search; add geo-based "near me" discovery, which fits the "local" mission directly.
-12. **Redis** caching + a shared rate-limit store (current limiter is in-memory, fine for one instance).
-13. **Compiled backend build** — `server` runs via `tsx` in production today; a `tsc` build + `node dist/`
+13. **Redis** caching + a shared rate-limit store (current limiter is in-memory, fine for one instance).
+14. **Compiled backend build** — `server` runs via `tsx` in production today; a `tsc` build + `node dist/`
     is the more conventional prod path once uptime/cold-start matters more than iteration speed.
-14. **i18n** — Hindi + regional languages; strongly on-brand for the target sellers.
-15. **httpOnly-cookie sessions** instead of a `localStorage` JWT, if the app ever handles anything more
+15. **i18n** — Hindi + regional languages; strongly on-brand for the target sellers.
+16. **httpOnly-cookie sessions** instead of a `localStorage` JWT, if the app ever handles anything more
     sensitive than a craft marketplace (see README → Known trade-offs).
 
 ## Ground rules (unchanged)

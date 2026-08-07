@@ -6,7 +6,11 @@ A digital marketplace that gives local micro-entrepreneurs — cobblers, potters
 small vendors — digital visibility and direct access to customers. Customers browse, request services, buy
 products, and leave earned reviews; entrepreneurs manage requests, listings, and availability from a dashboard.
 
-Live app: the frontend is deployed on Vercel, the API on Render (see [Deployment](#deployment)).
+**Live**: [hunarhub-eight.vercel.app](https://hunarhub-eight.vercel.app) (frontend) ·
+[hunarhub-api-s03k.onrender.com](https://hunarhub-api-s03k.onrender.com/health) (API — free-tier cold start,
+~30s on the first request after idle). Both verified live and end-to-end functional as of the M8 deployment
+pass (see [Deployment](#deployment)) — registration, login, role authorization, orders, and the admin
+dashboard were all tested against these exact URLs, not just deployed and assumed to work.
 
 ## Stack
 
@@ -40,13 +44,14 @@ Other scripts: `npm run build` (typecheck + production build), `npm run preview`
 
 ### Demo accounts
 
-Password for both: `password123`.
+Password for both: `password123`. (Deliberately public — try them on the live site, they can't reach
+another user's data or any admin functionality. There's no demo *admin* login here on purpose — see
+`DEPLOY-CHECKLIST.md` for why and how admin access is provisioned instead.)
 
 | Role | Email | Try |
 |---|---|---|
 | Customer | `priya@example.com` | Browse → open a profile → request a service → `/orders` to track it and leave a review once it's completed |
 | Entrepreneur | `ramesh@hunarhub.in` | `/dashboard` → accept/decline requests → mark complete → toggle availability → manage listings |
-| Admin | `admin@hunarhub.in` | `/admin` → platform metrics, user directory, cross-seller listing moderation |
 
 ## Architecture
 
@@ -119,7 +124,9 @@ server/
 │  ├─ routes/                # auth, entrepreneurs, services, products, orders, reviews, favorites, admin
 │  ├─ utils/                 # ApiError, asyncHandler, serialize (Mongoose doc → API JSON), token
 │  ├─ test/                  # db.ts (in-memory MongoDB harness), fixtures.ts (seed users + tokens)
-│  └─ seed/seed.ts           # demo data incl. the accounts above
+│  ├─ seed/seed.ts           # demo data incl. the customer/entrepreneur accounts above (admin gets its
+│  │                         # own generated password — never the public demo one, see DEPLOY-CHECKLIST.md)
+│  └─ scripts/setAdminPassword.ts  # rotate the admin password on an already-seeded DB without wiping it
 └─ render.yaml               # Render Blueprint (see Deployment)
 ```
 
@@ -194,12 +201,19 @@ Atlas. Required env vars are in `.env.example` (frontend) and `server/.env.examp
 ## Where things stand
 
 M1–M5 shipped live API + auth, orders + dashboard, discovery, and a design-system pass. A QA/polish pass then
-added accessibility (skip links, landmarks, ARIA fixes), performance (code splitting, `.lean()` + compound
-indexes), and this documentation. Most recently: an **admin dashboard** (`/admin` — platform metrics, user
-directory, cross-seller listing moderation, all backed by real new endpoints, not a frontend-only view), a
-**seller listing manager** (entrepreneurs create/edit/delete their own services and products from `/dashboard`
-without touching a database console), a **backend test suite** (40 tests covering auth, role authorization,
-listing ownership, and the order lifecycle), and **CI** — every PR and push to `main` now runs both suites,
-typecheck, and the production build automatically, with the repository hardened to build reproducibly on a
-clean machine (no dependency on any particular local disk layout). Remaining work — payments, image uploads,
-messaging, observability, i18n — is tracked in [ROADMAP.md](./ROADMAP.md).
+added accessibility, performance, and documentation. After that: an **admin dashboard**, a **seller listing
+manager**, a **backend test suite** (40 tests), and **CI** (every PR/push runs both suites, typecheck, and
+the build; the repo builds reproducibly on a clean machine).
+
+Most recently, a full **production deployment verification pass**: confirmed CI actually passed remotely (not
+assumed), then smoke-tested the live Vercel + Render + Atlas stack directly over HTTP — registration, login,
+session restore, every role-authorization boundary (customer blocked from admin/entrepreneur routes,
+unauthenticated blocked from protected ones), the full order lifecycle, favourites, a temporary listing
+create/edit/delete cycle, and the admin stats/users/listings endpoints — all against the real deployed URLs,
+all cleaned up afterward where the API allows it. That pass also found and fixed a real issue: the seeded
+admin account had been sharing the same public demo password documented in this README, which would have
+handed anyone reading the repo live admin access to any deployment run from the old seed script. Admin
+provisioning is now separate from the public demo accounts — see `DEPLOY-CHECKLIST.md`.
+
+Remaining work — payments, image uploads, messaging, observability, i18n — is tracked in
+[ROADMAP.md](./ROADMAP.md).

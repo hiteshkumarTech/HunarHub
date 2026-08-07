@@ -3,8 +3,17 @@
  * entrepreneurs (with services + products) that match the frontend.
  *
  * Run:  npm run seed
- * All demo accounts use the password:  password123
+ *
+ * Customer + entrepreneur demo accounts use the password:  password123
+ * (intentionally public — they're meant to be tried by anyone reviewing the app,
+ * and none of them can escalate past their own data).
+ *
+ * The admin account is DIFFERENT: it must never have a predictable password,
+ * because it grants full platform access (every user, every listing, moderation
+ * delete). Set ADMIN_SEED_PASSWORD before running this against anything other
+ * than a disposable local database — see the console output below if you don't.
  */
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { connectDB, disconnectDB } from '../config/db';
 import { User } from '../models/User';
@@ -58,7 +67,13 @@ async function run() {
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
-  await User.create({ name: 'Platform Admin', email: 'admin@hunarhub.in', passwordHash, role: 'admin' });
+  // Admin gets its own password — generated fresh (or read from
+  // ADMIN_SEED_PASSWORD) instead of sharing the public demo password above.
+  const generatedAdminPassword = crypto.randomBytes(12).toString('base64url');
+  const adminPassword = process.env.ADMIN_SEED_PASSWORD || generatedAdminPassword;
+  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+
+  await User.create({ name: 'Platform Admin', email: 'admin@hunarhub.in', passwordHash: adminPasswordHash, role: 'admin' });
   await User.create({ name: 'Priya Sharma', email: 'priya@example.com', passwordHash, role: 'customer' });
 
   for (const e of ENTREPRENEURS) {
@@ -88,8 +103,16 @@ async function run() {
   }
 
   console.log(`✓ Seeded 1 admin, 1 customer, ${ENTREPRENEURS.length} entrepreneurs (with services + products)`);
-  console.log('  Demo logins (password: password123):');
-  console.log('    admin@hunarhub.in  ·  priya@example.com  ·  ramesh@hunarhub.in …');
+  console.log('  Customer/entrepreneur demo logins (password: password123):');
+  console.log('    priya@example.com  ·  ramesh@hunarhub.in …');
+  console.log('');
+  if (process.env.ADMIN_SEED_PASSWORD) {
+    console.log('  Admin login: admin@hunarhub.in — password set from ADMIN_SEED_PASSWORD.');
+  } else {
+    console.log('  Admin login: admin@hunarhub.in');
+    console.log(`  Admin password (generated, shown once — save it now): ${generatedAdminPassword}`);
+    console.log('  Set ADMIN_SEED_PASSWORD next time to choose your own instead of a random one.');
+  }
 
   await disconnectDB();
 }

@@ -1,7 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Heart } from 'lucide-react';
+import { LogOut, LayoutDashboard, Heart, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { buttonStyles } from './ui/button';
+import { ThemeToggle } from './ui/ThemeToggle';
 import { cn } from '../lib/utils';
 
 /** Auth-aware navigation cluster used in the header and page bars. */
@@ -13,6 +14,7 @@ export function UserMenu({ variant = 'light' }: { variant?: 'light' | 'dark' }) 
   if (!user) {
     return (
       <div className="flex items-center gap-3">
+        <ThemeToggle />
         <Link to="/login" className={cn('text-[13px] font-medium transition-colors', muted)}>
           Sign in
         </Link>
@@ -25,15 +27,21 @@ export function UserMenu({ variant = 'light' }: { variant?: 'light' | 'dark' }) 
 
   return (
     <div className="flex items-center gap-3">
+      <ThemeToggle />
       {user.role === 'entrepreneur' && (
         <Link to="/dashboard" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
           <LayoutDashboard size={15} /> Dashboard
         </Link>
       )}
       {user.role === 'customer' && (
-        <Link to="/favourites" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
-          <Heart size={15} /> Saved
-        </Link>
+        <>
+          <Link to="/orders" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
+            <Package size={15} /> Orders
+          </Link>
+          <Link to="/favourites" className={cn('hidden items-center gap-1.5 text-[13px] font-medium transition-colors sm:inline-flex', muted)}>
+            <Heart size={15} /> Saved
+          </Link>
+        </>
       )}
       <span className={cn('hidden text-[13px] sm:inline', variant === 'dark' ? 'text-white/70' : 'text-gray-500')}>
         Hi, {user.name.split(' ')[0]}

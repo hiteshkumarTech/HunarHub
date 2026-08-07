@@ -13,7 +13,7 @@ export default function Favourites() {
   return (
     <div className="min-h-screen">
       <PageBar crumb="Favourites" />
-      <div className="px-6 py-10 md:px-16">
+      <main id="main-content" tabIndex={-1} className="px-6 py-10 md:px-16">
         <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">[ Your list ]</div>
         <h1 className="mt-2 text-[2rem] font-medium tracking-tight md:text-[3rem]">Saved makers</h1>
 
@@ -37,7 +37,7 @@ export default function Favourites() {
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

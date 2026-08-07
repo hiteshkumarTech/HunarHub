@@ -43,7 +43,7 @@ router.get(
     const skip = (page - 1) * limit;
 
     const [users, total] = await Promise.all([
-      User.find(filter).sort(sortBy).skip(skip).limit(limit),
+      User.find(filter).sort(sortBy).skip(skip).limit(limit).lean(),
       User.countDocuments(filter),
     ]);
 
@@ -87,13 +87,13 @@ router.patch(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const user = await User.findOne({ _id: req.params.id, role: 'entrepreneur' }).catch(() => null);
+    const user = await User.findOne({ _id: req.params.id, role: 'entrepreneur' }).lean().catch(() => null);
     if (!user) throw new ApiError(404, 'Entrepreneur not found');
 
     const [services, products, reviews] = await Promise.all([
-      Service.find({ entrepreneur: user._id }),
-      Product.find({ entrepreneur: user._id }),
-      Review.find({ entrepreneur: user._id }).populate('customer', 'name').sort({ createdAt: -1 }),
+      Service.find({ entrepreneur: user._id }).lean(),
+      Product.find({ entrepreneur: user._id }).lean(),
+      Review.find({ entrepreneur: user._id }).populate('customer', 'name').sort({ createdAt: -1 }).lean(),
     ]);
 
     res.json({

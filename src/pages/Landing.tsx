@@ -20,7 +20,7 @@ export default function Landing() {
   return (
     <>
       <Header />
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <HeroSection />
         <PopularCategories />
         <FeaturedEntrepreneurs />

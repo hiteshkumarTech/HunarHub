@@ -17,7 +17,7 @@ router.use(authRequired, requireRole('admin'));
 router.get(
   '/entrepreneurs',
   asyncHandler(async (_req, res) => {
-    const users = await User.find({ role: 'entrepreneur' }).sort({ createdAt: -1 });
+    const users = await User.find({ role: 'entrepreneur' }).sort({ createdAt: -1 }).lean();
     res.json({ entrepreneurs: users.map(entrepreneurCard) });
   }),
 );

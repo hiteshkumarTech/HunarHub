@@ -8,6 +8,7 @@ import { CatIcon } from '../components/craftIcons';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { EntrepreneurCardTile } from '../components/EntrepreneurCardTile';
 import { Skeleton, ErrorState, EmptyState } from '../components/ui/States';
+import { Tabs, TabPanel } from '../components/ui/Tabs';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../context/AuthContext';
 import { useEntrepreneur, useEntrepreneurs } from '../hooks/entrepreneurs';
@@ -50,7 +51,7 @@ export default function Profile() {
       <div className="min-h-screen">
         <PageBar crumb="Profile" />
         <Skeleton className="h-44 rounded-none md:h-60" />
-        <div className="px-6 md:px-16">
+        <div id="main-content" tabIndex={-1} className="px-6 md:px-16">
           <Skeleton className="-mt-12 h-24 w-24 rounded-full md:-mt-16" />
           <Skeleton className="mt-4 h-8 w-64" />
           <Skeleton className="mt-3 h-4 w-40" />
@@ -64,7 +65,7 @@ export default function Profile() {
     return (
       <div className="min-h-screen">
         <PageBar crumb="Profile" />
-        <div className="px-6 py-10 md:px-16">
+        <div id="main-content" tabIndex={-1} className="px-6 py-10 md:px-16">
           <ErrorState message={error instanceof Error ? error.message : 'Could not load this profile.'} onRetry={() => refetch()} />
         </div>
       </div>
@@ -124,7 +125,7 @@ export default function Profile() {
         </Link>
       </div>
 
-      <div className="px-6 md:px-16">
+      <div id="main-content" tabIndex={-1} className="px-6 md:px-16">
         <div className="relative z-10 -mt-12 w-fit md:-mt-16">
           <Monogram name={e.name} size={96} className="ring-4 ring-[#fcfcfc]" />
         </div>
@@ -169,26 +170,20 @@ export default function Profile() {
 
         {e.bio && <p className="mt-8 max-w-[720px] text-[15px] leading-[1.7] text-gray-700">{e.bio}</p>}
 
-        <div className="mt-10 flex gap-8 border-b border-gray-200">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                'relative pb-3 text-[11px] font-mono uppercase tracking-widest transition-colors',
-                tab === t.id ? 'text-black' : 'text-gray-400 hover:text-gray-700',
-              )}
-            >
-              {t.label}
-              {t.id === 'reviews' ? ` (${reviews.length})` : ''}
-              {tab === t.id && <span className="absolute -bottom-[1px] left-0 h-[2px] w-full bg-black" />}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          className="mt-10"
+          idPrefix="profile"
+          value={tab}
+          onChange={setTab}
+          items={TABS.map((t) => ({
+            id: t.id,
+            label: t.id === 'reviews' ? `${t.label} (${reviews.length})` : t.label,
+          }))}
+        />
 
         <div className="py-8">
-          {tab === 'services' &&
-            (services.length === 0 ? (
+          <TabPanel id="services" activeId={tab} idPrefix="profile">
+            {services.length === 0 ? (
               <EmptyState title="No services listed yet" />
             ) : (
               <div className="grid max-w-[760px] gap-3">
@@ -214,10 +209,11 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
-            ))}
+            )}
+          </TabPanel>
 
-          {tab === 'products' &&
-            (products.length === 0 ? (
+          <TabPanel id="products" activeId={tab} idPrefix="profile">
+            {products.length === 0 ? (
               <EmptyState title="No products listed yet" />
             ) : (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -243,10 +239,11 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
-            ))}
+            )}
+          </TabPanel>
 
-          {tab === 'reviews' &&
-            (reviews.length === 0 ? (
+          <TabPanel id="reviews" activeId={tab} idPrefix="profile">
+            {reviews.length === 0 ? (
               <EmptyState title="No reviews yet" hint="Reviews appear after a completed order." />
             ) : (
               <div className="grid max-w-[720px] gap-4">
@@ -263,7 +260,8 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
-            ))}
+            )}
+          </TabPanel>
         </div>
 
         {similarList.length > 0 && (

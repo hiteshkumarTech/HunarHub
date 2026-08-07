@@ -33,11 +33,16 @@ export function Footer() {
               vendors reach customers directly, keep more of what they earn, and keep traditional skills alive.
             </p>
             <div className="mt-5 flex items-center gap-3">
-              {[Instagram, Twitter, Facebook, Mail].map((Icon, i) => (
+              {[
+                { Icon: Instagram, label: 'HunarHub on Instagram' },
+                { Icon: Twitter, label: 'HunarHub on Twitter' },
+                { Icon: Facebook, label: 'HunarHub on Facebook' },
+                { Icon: Mail, label: 'Email HunarHub' },
+              ].map(({ Icon, label }) => (
                 <a
-                  key={i}
+                  key={label}
                   href="#"
-                  aria-label="HunarHub social link"
+                  aria-label={label}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-600 transition-colors hover:border-black hover:text-black"
                 >
                   <Icon size={16} />

@@ -15,7 +15,7 @@ export function AuthShell({
   footer?: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#fcfcfc]">
+    <main className="min-h-screen bg-[#fcfcfc]">
       <Container className="flex min-h-screen max-w-[460px] flex-col justify-center py-12">
         <Link to="/" className="text-[22px] font-semibold tracking-[-0.02em]">
           HunarHub
@@ -25,6 +25,6 @@ export function AuthShell({
         <div className="mt-7">{children}</div>
         {footer && <div className="mt-6 text-[13px] text-gray-600">{footer}</div>}
       </Container>
-    </div>
+    </main>
   );
 }

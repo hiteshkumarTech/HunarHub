@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { AuthProvider } from '../context/AuthContext';
+import { ThemeProvider } from '../context/ThemeContext';
 import Landing from './Landing';
 
 beforeEach(() => {
@@ -16,13 +17,15 @@ beforeEach(() => {
 function renderLanding() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <MemoryRouter>
-          <Landing />
-        </MemoryRouter>
-      </AuthProvider>
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter>
+            <Landing />
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>,
   );
 }
 

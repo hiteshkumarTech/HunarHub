@@ -17,7 +17,7 @@ router.use(authRequired, requireRole('customer'));
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const favs = await Favorite.find({ user: req.user!.id }).sort({ createdAt: -1 }).populate('entrepreneur');
+    const favs = await Favorite.find({ user: req.user!.id }).sort({ createdAt: -1 }).populate('entrepreneur').lean();
     const entrepreneurs = favs
       .map((f) => f.entrepreneur as unknown as { role?: string })
       .filter((e) => e && e.role === 'entrepreneur')

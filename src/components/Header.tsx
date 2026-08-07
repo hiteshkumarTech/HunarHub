@@ -29,6 +29,12 @@ export function Header() {
       variants={{ animate: { transition: { staggerChildren: 0.1, delayChildren: 0.1 } } }}
       className="relative z-20 pt-6 px-6 md:px-16"
     >
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-black focus:px-4 focus:py-2 focus:text-[13px] focus:font-medium focus:text-white"
+      >
+        Skip to content
+      </a>
       {/* utility bar: auth actions */}
       <div className="flex items-center justify-between pb-2">
         <span className="hidden text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 sm:inline">
@@ -77,7 +83,13 @@ export function Header() {
         </nav>
 
         {/* hamburger */}
-        <button onClick={() => setOpen((o) => !o)} className="md:hidden relative z-[60] flex flex-col gap-[6px] pt-1" aria-label="Menu">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="md:hidden relative z-[60] flex flex-col gap-[6px] pt-1"
+          aria-label="Menu"
+          aria-expanded={open}
+          aria-controls="mobile-nav"
+        >
           <span className={cn('block h-[1.5px] bg-black transition-all duration-300', open ? 'w-8 rotate-45 translate-y-[7.5px]' : 'w-8')} />
           <span className={cn('block h-[1.5px] bg-black transition-all duration-300', open ? 'w-8 -rotate-45 -translate-y-[1px]' : 'w-6')} />
         </button>
@@ -87,6 +99,7 @@ export function Header() {
       <AnimatePresence>
         {open && (
           <motion.div
+            id="mobile-nav"
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}

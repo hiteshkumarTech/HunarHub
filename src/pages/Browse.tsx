@@ -40,13 +40,13 @@ export default function Browse() {
   return (
     <div className="min-h-screen">
       <PageBar crumb="Browse" />
-      <div className="px-6 py-10 md:px-16">
+      <main id="main-content" tabIndex={-1} className="px-6 py-10 md:px-16">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">[ Marketplace ]</div>
             <h1 className="mt-2 text-[2rem] font-medium tracking-tight md:text-[3rem]">Browse local makers</h1>
           </div>
-          <div className="text-[11px] font-mono text-gray-500">
+          <div aria-live="polite" className="text-[11px] font-mono text-gray-500">
             {query.isLoading ? 'Loading…' : `${total} maker${total === 1 ? '' : 's'}`}
           </div>
         </div>
@@ -145,7 +145,7 @@ export default function Browse() {
             )}
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

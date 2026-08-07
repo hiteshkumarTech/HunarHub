@@ -26,8 +26,10 @@ router.post(
   validateBody(createSchema),
   asyncHandler(async (req, res) => {
     const { entrepreneurId, kind, itemId, note } = req.body;
-    const model = kind === 'service' ? Service : Product;
-    const item = await model.findById(itemId).catch(() => null);
+    // Branching on the call (rather than aliasing `kind === 'service' ? Service : Product`
+    // into one variable) sidesteps a TS limitation: a union of two Mongoose Models' overloaded
+    // `findById` statics isn't itself callable, even though each member is.
+    const item = kind === 'service' ? await Service.findById(itemId).catch(() => null) : await Product.findById(itemId).catch(() => null);
     if (!item || item.entrepreneur.toString() !== entrepreneurId) {
       throw new ApiError(404, 'That item was not found for this entrepreneur');
     }
@@ -50,7 +52,7 @@ router.get(
   authRequired,
   requireRole('customer'),
   asyncHandler(async (req, res) => {
-    const orders = await Order.find({ customer: req.user!.id }).populate('entrepreneur', 'name').sort({ createdAt: -1 });
+    const orders = await Order.find({ customer: req.user!.id }).populate('entrepreneur', 'name').sort({ createdAt: -1 }).lean();
     res.json({ orders: orders.map(orderJson) });
   }),
 );
@@ -61,7 +63,7 @@ router.get(
   authRequired,
   requireRole('entrepreneur'),
   asyncHandler(async (req, res) => {
-    const orders = await Order.find({ entrepreneur: req.user!.id }).populate('customer', 'name').sort({ createdAt: -1 });
+    const orders = await Order.find({ entrepreneur: req.user!.id }).populate('customer', 'name').sort({ createdAt: -1 }).lean();
     res.json({ orders: orders.map(orderJson) });
   }),
 );

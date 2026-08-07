@@ -35,5 +35,9 @@ const userSchema = new Schema(
 // Text index to support the Browse search box.
 userSchema.index({ name: 'text', 'profile.craft': 'text', 'profile.city': 'text', 'profile.state': 'text' });
 
+// Browse's default sort (and the Landing page's "Featured" rail) both filter to
+// entrepreneurs and sort by rating — the single most common query shape.
+userSchema.index({ role: 1, 'profile.ratingAvg': -1 });
+
 export type UserDoc = InferSchemaType<typeof userSchema>;
 export const User = model('User', userSchema);

@@ -30,11 +30,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="pointer-events-none fixed bottom-5 right-5 z-[100] flex w-[calc(100vw-2.5rem)] max-w-sm flex-col gap-2">
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed bottom-5 right-5 z-[100] flex w-[calc(100vw-2.5rem)] max-w-sm flex-col gap-2"
+      >
         {items.map((t) => (
           <div
             key={t.id}
-            role="status"
+            // Errors interrupt (assertive); success/info wait for a pause (polite) —
+            // role alone carries the correct implicit aria-live for each.
+            role={t.type === 'error' ? 'alert' : 'status'}
             className={cn(
               'pointer-events-auto flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg',
               t.type === 'error' ? 'border-red-200' : t.type === 'success' ? 'border-green-200' : 'border-gray-200',

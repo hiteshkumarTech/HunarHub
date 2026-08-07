@@ -68,6 +68,7 @@ router.get(
     const reviews = await Review.find({ entrepreneur: req.params.id })
       .populate('customer', 'name')
       .sort({ createdAt: -1 })
+      .lean()
       .catch(() => []);
     res.json({ reviews: reviews.map(reviewJson) });
   }),

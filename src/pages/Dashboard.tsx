@@ -78,7 +78,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#fcfcfc]">
       <PageBar crumb="Dashboard" />
-      <div className="px-6 py-10 md:px-16">
+      <main id="main-content" tabIndex={-1} className="px-6 py-10 md:px-16">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
             <Monogram name={user.name} size={56} />
@@ -212,7 +212,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

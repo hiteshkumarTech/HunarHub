@@ -1,5 +1,7 @@
 # HunarHub
 
+[![CI](https://github.com/hiteshkumarTech/HunarHub/actions/workflows/ci.yml/badge.svg)](https://github.com/hiteshkumarTech/HunarHub/actions/workflows/ci.yml)
+
 A digital marketplace that gives local micro-entrepreneurs — cobblers, potters (kumhar), tailors, artisans and
 small vendors — digital visibility and direct access to customers. Customers browse, request services, buy
 products, and leave earned reviews; entrepreneurs manage requests, listings, and availability from a dashboard.
@@ -179,6 +181,10 @@ lifecycle and cross-seller isolation, the earned-review rule, and the new admin 
 not fabricated numbers; moderation delete; role/search filters). Each suite boots its own in-memory MongoDB
 instance via `mongodb-memory-server` — nothing here ever touches a real database, local or production.
 
+**CI** (`.github/workflows/ci.yml`) runs both suites — plus typecheck and the production build — on every pull
+request and every push to `main`. No secrets required: the frontend build needs none, and the backend's
+`env.ts` falls back to safe non-production defaults outside `NODE_ENV=production`.
+
 ## Deployment
 
 See **[DEPLOY-CHECKLIST.md](./DEPLOY-CHECKLIST.md)** for the step-by-step. Short version: frontend → Vercel
@@ -192,6 +198,8 @@ added accessibility (skip links, landmarks, ARIA fixes), performance (code split
 indexes), and this documentation. Most recently: an **admin dashboard** (`/admin` — platform metrics, user
 directory, cross-seller listing moderation, all backed by real new endpoints, not a frontend-only view), a
 **seller listing manager** (entrepreneurs create/edit/delete their own services and products from `/dashboard`
-without touching a database console), and a **backend test suite** (40 tests covering auth, role authorization,
-listing ownership, and the order lifecycle — see [Testing](#testing)). Remaining work — payments, image uploads,
-messaging, i18n, CI, observability — is tracked in [ROADMAP.md](./ROADMAP.md).
+without touching a database console), a **backend test suite** (40 tests covering auth, role authorization,
+listing ownership, and the order lifecycle), and **CI** — every PR and push to `main` now runs both suites,
+typecheck, and the production build automatically, with the repository hardened to build reproducibly on a
+clean machine (no dependency on any particular local disk layout). Remaining work — payments, image uploads,
+messaging, observability, i18n — is tracked in [ROADMAP.md](./ROADMAP.md).

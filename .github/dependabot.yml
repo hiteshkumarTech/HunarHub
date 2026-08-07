@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Frontend
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Backend
+  - package-ecosystem: npm
+    directory: "/server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Keep the CI workflow's actions/* versions current too.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

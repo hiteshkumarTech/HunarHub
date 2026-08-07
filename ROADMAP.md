@@ -1,8 +1,8 @@
 # HunarHub — Roadmap
 
-_Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), and an admin +
-listing-management + backend-tests pass. Supersedes the original pre-M1 audit — most of P0 and P1 below are
-now done; this file tracks what's actually left._
+_Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), an admin +
+listing-management + backend-tests pass, and a CI + repository-portability pass. Supersedes the original
+pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's actually left._
 
 ## Done
 
@@ -46,6 +46,20 @@ now done; this file tracks what's actually left._
   against DB state, not just status codes), the order lifecycle + cross-seller isolation, earned reviews, and
   the new admin routes. Every suite runs against an isolated in-memory MongoDB — never a real database.
 
+**CI + repository portability**
+- ✅ **`.github/workflows/ci.yml`** — separate `frontend` (typecheck → test → build) and `backend`
+  (typecheck → test) jobs, on every PR and every push to `main`. No secrets: the backend's MongoDB is
+  `mongodb-memory-server`, cached across runs, pinned to an explicit version.
+- ✅ **Removed `"preserveSymlinks": true`** from `server/tsconfig.json` — it was added to fix a local
+  Windows directory-junction workaround (this machine's C: drive had ~0 bytes free, so `server/node_modules`
+  was relocated to a D: junction). Verified empirically with a fresh `npm ci` into a normal, non-symlinked
+  directory: typecheck and all 40 tests pass with no `preserveSymlinks` at all — it was never something
+  HunarHub itself needed. (Re-tested the local junction too, now also passing without it — the original
+  failure was most likely leftover corruption from that session's disk-full `npm install` retries, not the
+  junction/symlink mechanism itself.)
+- ✅ `.github/dependabot.yml` — weekly, PR-only updates for both npm ecosystems (`/`, `/server`) and the
+  workflow's own `actions/*` versions.
+
 ## Remaining (highest → lowest priority)
 
 ### P2 — trust, quality, developer experience
@@ -58,11 +72,14 @@ now done; this file tracks what's actually left._
    it; worth a small state machine if this starts mattering.
 3. **Shared types / typed client** — `src/types/api.ts` (frontend) and the Mongoose models (backend) are
    hand-kept in sync. Low risk at current size; worth a generator (tRPC-style or OpenAPI) if the schema churns.
-4. **CI** — no GitHub Actions yet. Typecheck + test on every PR would have caught the `typecheck` script bug
-   and the missing test dependency automatically.
-5. **Observability** — structured logs (`morgan` only today), error tracking (Sentry), a readiness probe
+4. **Observability** — structured logs (`morgan` only today), error tracking (Sentry), a readiness probe
    beyond `/health`.
-6. **`/api/v1` versioning** before any external consumer exists.
+5. **`/api/v1` versioning** before any external consumer exists.
+6. **npm audit deferrals** — root has 7 advisories, all either dev-tooling-only (an esbuild/vite chain
+   pulled in transitively by `vitest`, and a critical-but-inapplicable `vitest --ui` RCE — this project never
+   runs `--ui`) or a `react-router` CSRF advisory specific to RSC mode (this is a plain SPA, not using RSC)
+   whose fix needs a v8 major bump. Server audit is clean (0 advisories). None are safely fixable without a
+   major version bump, so none were forced — see the CI pass's final report for the full classification.
 
 ### P3 — growth features
 7. **Payments** (Razorpay for India) with hold/escrow on service completion.

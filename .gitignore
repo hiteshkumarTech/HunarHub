@@ -3,6 +3,7 @@ dist
 dist-ssr
 *.local
 .vite
+coverage
 
 # env files — never commit real secrets; .env.example files stay tracked
 .env

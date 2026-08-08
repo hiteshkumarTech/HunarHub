@@ -90,11 +90,40 @@ tracks what's actually left._
   group instead of `vite`'s actual `high` severity, and omitting `vite-node` entirely). Re-ran the audit and
   reconciled it — see the updated breakdown below.
 
-## ⚠️ One manual action still required
+**Credential-exposure incident closure (code side)**
+- ✅ Confirmed by direct code inspection, not assumption: HunarHub's JWTs are fully stateless (signature +
+  expiry only, no session store, no refresh token) — so rotating the admin password alone does **not**
+  invalidate a JWT issued while the old password was exposed. `JWT_SECRET` rotation is required too, since
+  it's the only thing that invalidates already-issued tokens. Both steps, plus the exact pre/post
+  verification checks, are now a single runbook in `DEPLOY-CHECKLIST.md`.
+- ✅ Audited `setAdminPassword.ts` against a full safety checklist (safe targeting, correct hashing, never
+  logs the password or the Mongo URI, fails clearly on bad input, can't upsert a stray second admin, can't
+  touch other users, disconnects cleanly) — it already passed every point, so it was left alone.
+- ✅ Hardened its *invocation*: it now prompts for the password with terminal echo off by default (falls
+  back to `NEW_ADMIN_PASSWORD` for non-interactive use), so the password no longer has to appear as literal
+  text in a shell command or history file.
+- ✅ Closed a gap `setAdminPassword.ts` already had but `seed.ts` didn't: `ADMIN_SEED_PASSWORD` is now
+  rejected if it's under 12 characters or a common default (`password123`, `admin123`, …) — checked before
+  any database write, so a weak value fails safe with nothing touched. Previously, setting it to a weak
+  value would have silently reintroduced the exact vulnerability being fixed.
+- ✅ Swept current tree and full git history for other exposed credentials — found none. No real Mongo
+  connection string or `JWT_SECRET` value was ever committed at any point; `seed.ts` has exactly two
+  revisions (the original, and this fix). Concluded history rewriting is unnecessary: the exposed value was
+  a guessable demo string, not a unique leaked secret, and both rotations below fully neutralize it —
+  scrubbing history would be security theater, not a real mitigation.
+- 📝 **Future hardening note** (not needed to close this incident, since `JWT_SECRET` rotation already
+  invalidates every outstanding token globally): ordinary password changes still won't revoke individual
+  sessions going forward, because JWTs stay stateless. If that ever matters again, the fix is a per-user
+  `tokenVersion`/`securityVersion` field checked on every request, or materially shorter token lifetimes —
+  not a Redis blacklist, which is unnecessary complexity for this app's scale.
 
-Production's admin password needs rotating — the fix shipped in code this pass, but the actual rotation
-needs the live `MONGODB_URI`, which no automated session has ever had access to. One command, documented at
-the top of `DEPLOY-CHECKLIST.md`. Do this before treating the deployment as fully secured.
+## 🔴 One manual action still required
+
+**Rotating the password alone does not close this incident.** Production needs BOTH the admin password AND
+`JWT_SECRET` rotated — the code fix shipped this pass, but both actual rotations need live Render/Atlas
+access, which no automated session has ever had. Full runbook + exact verification commands at the top of
+`DEPLOY-CHECKLIST.md`. Until both are done and check B in that runbook passes, treat this as **open**, not
+resolved.
 
 ## Remaining (highest → lowest priority)
 

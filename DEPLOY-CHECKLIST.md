@@ -3,24 +3,100 @@
 Three pieces: **MongoDB Atlas** (database) → **Render** (API) → **Vercel** (frontend). Set them up in that
 order — the API needs a live database to boot, and the frontend needs a live API URL to point at.
 
-## ⚠️ If you deployed before 2026-08-07, rotate the admin password now
+## 🔴 Security action required — production credential rotation
+
+**Status: code remediated, live rotation still pending.** Do this before anything else below.
+
+### What happened
 
 Earlier versions of `seed.ts` hardcoded the admin account (`admin@hunarhub.in`) to the same public demo
 password (`password123`) documented in this repo's README. That's fine for the customer/entrepreneur demo
 accounts — they can't escalate past their own data — but it means anyone who read this repo could log into
-the **admin** account of any deployment that ran the old seed script.
+the **admin** account of any deployment that ran the old seed script. A real login against production
+confirmed the credential worked.
 
-Fix it without touching anything else in the database (no `npm run seed` — that wipes every collection,
-including any real users who've registered since):
+### Why rotating the password alone is NOT enough
+
+HunarHub's auth is **stateless JWTs** (`jsonwebtoken`, verified only by cryptographic signature + expiry —
+see `server/src/middleware/auth.ts`). There is no session store, no refresh token, and nothing that checks
+a token against current account state. **Changing the admin's password does not invalidate a JWT that was
+already issued.** If anyone logged in with the exposed password before you rotate it, their token keeps
+working — against every admin endpoint — until it naturally expires (`JWT_EXPIRES_IN`, currently `7d` from
+issuance). Closing this incident requires **both**:
+
+1. Rotate the admin password (`server/src/scripts/setAdminPassword.ts`).
+2. Rotate `JWT_SECRET` on Render — this invalidates *every* previously issued token for *every* user,
+   admin or not, forcing everyone to log in again. That's an intentional, acceptable trade-off here, not a
+   side effect to work around.
+
+### Runbook (do this in order)
+
+1. Open the Render dashboard → `hunarhub-api` service → **Environment**.
+2. Have the production `MONGODB_URI` ready (already in Render's env vars — copy it from there, or from
+   wherever you originally stored it; never paste it into a chat, a commit, or this file).
+3. Run the rotation script **locally**, in a terminal you trust:
+   ```bash
+   cd server
+   MONGODB_URI="<paste the connection string here, not into a file>" npm run set-admin-password
+   ```
+   You'll be prompted for the new password with the input hidden (nothing echoes to the terminal, nothing
+   is written to shell history). If you'd rather not use the interactive prompt — e.g. scripting this from
+   a secrets manager — set `NEW_ADMIN_PASSWORD` as an env var instead; the script accepts either.
+4. In the same Render **Environment** tab, edit `JWT_SECRET`. Generate a new value — Render can
+   auto-generate one for you (the same mechanism the Blueprint used originally), or generate your own with
+   `openssl rand -hex 32` (run locally; don't paste the output anywhere but the Render field). **Don't
+   reuse or lightly modify the old value** — it needs to be unrelated, not derived from it.
+5. Save the environment changes.
+6. Render redeploys/restarts the service automatically on an env var change; if it doesn't, trigger a
+   manual restart from the dashboard.
+7. Once the service is back up (`GET /health` returns 200), run verification check **B** below — this is
+   the one that actually proves the incident is closed, not just the password change.
+8. Run check **A** — confirm the old password is rejected.
+9. Run check **C** — confirm the new password works.
+10. Run checks **D**, **E**, **F** — confirm the new admin token has the right access and everyone else
+    still has the right restrictions.
+11. Clear any local trace of what you just did: unset `MONGODB_URI`/`NEW_ADMIN_PASSWORD` in your shell
+    (`unset MONGODB_URI NEW_ADMIN_PASSWORD`), and if you're on a shell that recorded the command with an
+    inline `NEW_ADMIN_PASSWORD=...` (not needed if you used the interactive prompt), clear that specific
+    history entry.
+
+### Post-rotation verification (exact checks)
+
+Replace `<api>` with the Render URL, `<old-token>` with an admin JWT captured *before* rotation (if you
+have one on hand), and the request bodies' password with the actual old/new admin passwords.
+
+| # | Check | Request | Expected |
+|---|---|---|---|
+| A | Old password rejected | `POST /api/auth/login` with the old admin password | **401** |
+| B | Old token rejected | `GET /api/admin/stats` with `Authorization: Bearer <old-token>` | **401** — if this returns 200, the incident is **not** closed; `JWT_SECRET` wasn't actually rotated (or the service hasn't restarted yet) |
+| C | New login works | `POST /api/auth/login` with the new admin password | **200** + a new token |
+| D | New token has admin access | `GET /api/admin/stats`, `/api/admin/users`, `/api/admin/listings` with the new token | **200** on all three |
+| E | Customer still blocked | Any customer token against `/api/admin/stats` | **403** |
+| F | Unauthenticated still blocked | No token against `/api/admin/stats` | **401** |
 
 ```bash
-cd server
-MONGODB_URI="<your Atlas connection string>" NEW_ADMIN_PASSWORD="<a strong new password, 12+ chars>" npm run set-admin-password
+API=https://hunarhub-api-s03k.onrender.com
+
+# A — old password
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$API/api/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"admin@hunarhub.in","password":"<OLD PASSWORD>"}'
+
+# B — old token (the one check that actually proves closure)
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats" -H "Authorization: Bearer <OLD TOKEN>"
+
+# C — new login
+curl -s -X POST "$API/api/auth/login" -H "Content-Type: application/json" \
+  -d '{"email":"admin@hunarhub.in","password":"<NEW PASSWORD>"}'
+# copy the returned token for D
+
+# D — new token, admin access
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats"    -H "Authorization: Bearer <NEW TOKEN>"
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/users"    -H "Authorization: Bearer <NEW TOKEN>"
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/listings" -H "Authorization: Bearer <NEW TOKEN>"
 ```
 
-This only updates the admin's `passwordHash`. Everything else — users, orders, listings, reviews — is
-untouched. Do this once, store the new password somewhere real (a password manager, not this repo), and
-you're done; `seed.ts` itself no longer hardcodes a predictable admin password on future runs (see step 1).
+None of these commands need to be run from this repo or this machine — any terminal with `curl` works.
+Don't paste real tokens or passwords into a chat, issue tracker, or commit.
 
 ## 0. Before you deploy
 
@@ -106,11 +182,11 @@ Uses the committed Blueprint at `server/render.yaml` — New → Blueprint → p
 | `PORT` | `server/src/index.ts` | No — defaults to 4000 | No — Render sets this automatically | N/A, server-only |
 | `NODE_ENV` | `server/src/config/env.ts`, `app.ts` (log toggle), Render's build step (skips devDependencies) | No — defaults `development` | Yes, functionally — must be exactly `production` for fail-fast validation to engage | N/A, server-only |
 | `MONGODB_URI` | `server/src/config/db.ts` | No — falls back to local Mongo | **Yes** — boot fails without it | **Never** |
-| `JWT_SECRET` | `server/src/utils/token.ts` | No — insecure dev fallback (rejected outright if used in prod) | **Yes** — boot fails without it, and boot fails if it's still the dev default | **Never** |
+| `JWT_SECRET` | `server/src/utils/token.ts` | No — insecure dev fallback (rejected outright if used in prod) | **Yes** — boot fails without it, and boot fails if it's still the dev default. Rotating it invalidates every previously issued token, for every user — see the runbook at the top of this file | **Never** |
 | `JWT_EXPIRES_IN` | `server/src/utils/token.ts` | No — defaults `7d` | No — same default is fine | N/A, server-only (harmless even if seen — it's a duration, not a secret) |
 | `CLIENT_ORIGIN` | `server/src/config/env.ts` → CORS allowlist | No — defaults to localhost | Recommended for a custom domain (`*.vercel.app` and localhost are already allowed unconditionally) | N/A, not sensitive |
-| `ADMIN_SEED_PASSWORD` | `server/src/seed/seed.ts` | No — a random one is generated and printed once if unset | Recommended so you choose the password rather than reading it off a console log | **Never** — it's a password |
-| `NEW_ADMIN_PASSWORD` | `server/src/scripts/setAdminPassword.ts` | Required to run that script at all | — (one-off script, not a running service) | **Never** |
+| `ADMIN_SEED_PASSWORD` | `server/src/seed/seed.ts` | No — a random one is generated and printed once if unset | Recommended so you choose the password rather than reading it off a console log. Rejected outright if it's under 12 characters or a common default (`password123`, `admin123`, …) — can't reintroduce the original vulnerability by accident | **Never** — it's a password |
+| `NEW_ADMIN_PASSWORD` | `server/src/scripts/setAdminPassword.ts` | No — omit it and the script prompts interactively with the input hidden (preferred; never touches shell history) | — (one-off script, not a running service). Same weak-password rejection as `ADMIN_SEED_PASSWORD` | **Never** |
 | `NODE_VERSION` | Render platform (build-time only) | N/A | Recommended — pins the runtime to match CI | N/A |
 
 ## 5. Post-deploy smoke test
@@ -154,6 +230,7 @@ the minimum needed to prove registration itself works.
   versions.
 - **Database** — Atlas free-tier (M0) has no continuous backups; if you're past the demo stage, enable Atlas
   backups before relying on this for anything real.
-- **Compromised admin credential** — rotate immediately with `npm run set-admin-password` (see the top of
-  this file). It doesn't require a deploy or a restart — the password check happens on every login, so the
-  new password is effective the moment the script finishes.
+- **Compromised admin credential** — see the runbook at the top of this file. The password half
+  (`npm run set-admin-password`) takes effect immediately, no deploy needed — the password check happens on
+  every login. The `JWT_SECRET` half needs a Render env var change, which does trigger a restart; that's
+  required, not optional, because it's the only thing that invalidates JWTs issued before rotation.

@@ -213,7 +213,10 @@ create/edit/delete cycle, and the admin stats/users/listings endpoints — all a
 all cleaned up afterward where the API allows it. That pass also found and fixed a real issue: the seeded
 admin account had been sharing the same public demo password documented in this README, which would have
 handed anyone reading the repo live admin access to any deployment run from the old seed script. Admin
-provisioning is now separate from the public demo accounts — see `DEPLOY-CHECKLIST.md`.
+provisioning is now separate from the public demo accounts. That fix is in the code — closing it in the
+*live* deployment also requires rotating the production `JWT_SECRET` (HunarHub's JWTs are stateless, so a
+password change alone doesn't invalidate a token issued before rotation); full runbook in
+`DEPLOY-CHECKLIST.md`.
 
 Remaining work — payments, image uploads, messaging, observability, i18n — is tracked in
 [ROADMAP.md](./ROADMAP.md).

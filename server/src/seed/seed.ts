@@ -54,6 +54,21 @@ const ENTREPRENEURS: SeedEntrepreneur[] = [
   { id: 'gopal', name: 'Gopal Sharma', category: 'artisan', craft: 'Artisan · Woodwork', city: 'Saharanpur', state: 'Uttar Pradesh', exp: 22, rating: 4.9, reviews: 87, start: 300, available: false, verified: true, bio: 'Saharanpur wood-carving artisan crafting jharokhas, trays and carved home décor from sheesham wood.', services: [{ name: 'Carved Wall Panel', price: 2500, dur: '12 days' }, { name: 'Wooden Serving Tray', price: 700, dur: '4 days' }], products: [{ name: 'Carved Trinket Box', price: 480 }, { name: 'Sheesham Coasters (6)', price: 360 }] },
 ];
 
+// An explicitly-set-but-weak ADMIN_SEED_PASSWORD is rejected rather than silently
+// accepted — otherwise ADMIN_SEED_PASSWORD=password123 could quietly reintroduce
+// the exact vulnerability this file was fixed to close. Checked BEFORE any
+// database write below, so a weak value fails safe with nothing touched yet.
+const WEAK_ADMIN_PASSWORDS = new Set(['password123', 'admin123', 'changeme', 'password', 'admin']);
+if (process.env.ADMIN_SEED_PASSWORD) {
+  const candidate = process.env.ADMIN_SEED_PASSWORD;
+  if (candidate.length < 12 || WEAK_ADMIN_PASSWORDS.has(candidate.toLowerCase())) {
+    throw new Error(
+      '[seed] ADMIN_SEED_PASSWORD is too weak (needs 12+ chars, not a common default). ' +
+        'Unset it to get a random generated password instead, or provide a stronger one.',
+    );
+  }
+}
+
 async function run() {
   await connectDB();
 
@@ -67,8 +82,8 @@ async function run() {
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
-  // Admin gets its own password — generated fresh (or read from
-  // ADMIN_SEED_PASSWORD) instead of sharing the public demo password above.
+  // Admin gets its own password — generated fresh, or read from ADMIN_SEED_PASSWORD
+  // (already validated above) — instead of sharing the public demo password above.
   const generatedAdminPassword = crypto.randomBytes(12).toString('base64url');
   const adminPassword = process.env.ADMIN_SEED_PASSWORD || generatedAdminPassword;
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);

@@ -34,18 +34,35 @@ issuance). Closing this incident requires **both**:
 1. Open the Render dashboard → `hunarhub-api` service → **Environment**.
 2. Have the production `MONGODB_URI` ready (already in Render's env vars — copy it from there, or from
    wherever you originally stored it; never paste it into a chat, a commit, or this file).
-3. Run the rotation script **locally**, in a terminal you trust:
+3. Run the rotation script **locally**, in a terminal you trust. The syntax for setting an env var for one
+   command differs by shell — use the one that matches your actual terminal, not whichever you find first
+   in a search result:
+
+   **Windows PowerShell** (this project's primary dev shell):
+   ```powershell
+   cd server
+   $env:MONGODB_URI = "<paste the connection string here, not into a file>"
+   npm run set-admin-password
+   Remove-Item Env:MONGODB_URI
+   ```
+   The inline `VAR="value" command` form below is **Bash syntax and does not work in PowerShell** — it
+   either errors or silently does nothing useful there.
+
+   **Bash / macOS / Linux**:
    ```bash
    cd server
    MONGODB_URI="<paste the connection string here, not into a file>" npm run set-admin-password
    ```
-   You'll be prompted for the new password with the input hidden (nothing echoes to the terminal, nothing
-   is written to shell history). If you'd rather not use the interactive prompt — e.g. scripting this from
-   a secrets manager — set `NEW_ADMIN_PASSWORD` as an env var instead; the script accepts either.
-4. In the same Render **Environment** tab, edit `JWT_SECRET`. Generate a new value — Render can
-   auto-generate one for you (the same mechanism the Blueprint used originally), or generate your own with
-   `openssl rand -hex 32` (run locally; don't paste the output anywhere but the Render field). **Don't
-   reuse or lightly modify the old value** — it needs to be unrelated, not derived from it.
+
+   Either way, you'll be prompted for the new password with the input hidden (nothing echoes to the
+   terminal, nothing is written to shell history). If you'd rather not use the interactive prompt — e.g.
+   scripting this from a secrets manager — set `NEW_ADMIN_PASSWORD` the same way as `MONGODB_URI` above;
+   the script accepts either.
+4. In the same Render **Environment** tab, edit `JWT_SECRET`. Generate a new value — Render's own secret
+   generator, if available in the dashboard, is the easiest option; otherwise generate one locally and
+   paste only the result into the Render field (PowerShell: `-join ((48..57)+(65..90)+(97..122)|Get-Random
+   -Count 40|%{[char]$_})`; Bash/macOS/Linux: `openssl rand -hex 32`). **Don't reuse or lightly modify the
+   old value** — it needs to be unrelated, not derived from it.
 5. Save the environment changes.
 6. Render redeploys/restarts the service automatically on an env var change; if it doesn't, trigger a
    manual restart from the dashboard.
@@ -55,25 +72,75 @@ issuance). Closing this incident requires **both**:
 9. Run check **C** — confirm the new password works.
 10. Run checks **D**, **E**, **F** — confirm the new admin token has the right access and everyone else
     still has the right restrictions.
-11. Clear any local trace of what you just did: unset `MONGODB_URI`/`NEW_ADMIN_PASSWORD` in your shell
-    (`unset MONGODB_URI NEW_ADMIN_PASSWORD`), and if you're on a shell that recorded the command with an
-    inline `NEW_ADMIN_PASSWORD=...` (not needed if you used the interactive prompt), clear that specific
-    history entry.
+11. Clear any local trace of what you just did.
+    PowerShell: `Remove-Item Env:MONGODB_URI` (already shown above), and `Remove-Item Env:NEW_ADMIN_PASSWORD`
+    if you set it.
+    Bash/macOS/Linux: `unset MONGODB_URI NEW_ADMIN_PASSWORD`.
+    Neither is needed for the password itself if you used the interactive prompt — it was never assigned to
+    a variable.
 
 ### Post-rotation verification (exact checks)
 
-Replace `<api>` with the Render URL, `<old-token>` with an admin JWT captured *before* rotation (if you
-have one on hand), and the request bodies' password with the actual old/new admin passwords.
+Replace `<api>` with the Render URL, `<old-token>` with an admin JWT captured *before* rotation, and the
+request bodies' password with the actual old/new admin passwords.
+
+**Check B needs a token captured before rotation.** If you don't have one on hand, run A and C–F only and
+say so — do not generate a fresh token and call it "the old token," and do not treat a skipped B as a
+failure. Without B you're proving invalidation *cryptographically* (a differently-signed `JWT_SECRET`
+mathematically cannot validate a token signed with the old one — that's how HMAC signing works, not
+something that needs a live demonstration to be true) rather than *empirically* with a specific captured
+token. Both are legitimate; only claim the one you actually did.
 
 | # | Check | Request | Expected |
 |---|---|---|---|
 | A | Old password rejected | `POST /api/auth/login` with the old admin password | **401** |
-| B | Old token rejected | `GET /api/admin/stats` with `Authorization: Bearer <old-token>` | **401** — if this returns 200, the incident is **not** closed; `JWT_SECRET` wasn't actually rotated (or the service hasn't restarted yet) |
+| B | Old token rejected (needs a pre-rotation token — skip if none was captured, see above) | `GET /api/admin/stats` with `Authorization: Bearer <old-token>` | **401** — if this returns 200, the incident is **not** closed; `JWT_SECRET` wasn't actually rotated (or the service hasn't restarted yet) |
 | C | New login works | `POST /api/auth/login` with the new admin password | **200** + a new token |
 | D | New token has admin access | `GET /api/admin/stats`, `/api/admin/users`, `/api/admin/listings` with the new token | **200** on all three |
 | E | Customer still blocked | Any customer token against `/api/admin/stats` | **403** |
 | F | Unauthenticated still blocked | No token against `/api/admin/stats` | **401** |
 
+**Windows PowerShell** — use `curl.exe` explicitly (plain `curl` is a PowerShell alias for
+`Invoke-WebRequest`, which doesn't understand `-s`/`-o`/`-w`), and `NUL` instead of `/dev/null`.
+
+For the two checks with a JSON body (A, C), **do not** pass the JSON as an inline `-d '...'` argument —
+PowerShell's quoting and curl.exe's own Windows argv parsing don't round-trip embedded double-quotes
+correctly, and the request silently arrives corrupted. This was tested directly against production while
+writing this checklist: an inline-quoted body produced `500 Internal server error` on a **known-good**
+login, which looked like a server bug but wasn't — the fix below (`ConvertTo-Json` into a temp file, then
+`-d @file`) was verified working (clean `401`/`200` as expected) before being written here.
+```powershell
+$API = "https://hunarhub-api-s03k.onrender.com"
+
+# A — old password
+$bodyFile = New-TemporaryFile
+@{ email = "admin@hunarhub.in"; password = "<OLD PASSWORD>" } | ConvertTo-Json -Compress | Set-Content -Path $bodyFile -Encoding utf8 -NoNewline
+curl.exe -s -o NUL -w "%{http_code}`n" -X POST "$API/api/auth/login" -H "Content-Type: application/json" -d "@$bodyFile"
+Remove-Item $bodyFile
+
+# B — old token (skip if you don't have one — see note above)
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/stats" -H "Authorization: Bearer <OLD TOKEN>"
+
+# C — new login
+$bodyFile = New-TemporaryFile
+@{ email = "admin@hunarhub.in"; password = "<NEW PASSWORD>" } | ConvertTo-Json -Compress | Set-Content -Path $bodyFile -Encoding utf8 -NoNewline
+curl.exe -s -X POST "$API/api/auth/login" -H "Content-Type: application/json" -d "@$bodyFile"
+Remove-Item $bodyFile
+# copy the returned token for D
+
+# D — new token, admin access
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/stats"    -H "Authorization: Bearer <NEW TOKEN>"
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/users"    -H "Authorization: Bearer <NEW TOKEN>"
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/listings" -H "Authorization: Bearer <NEW TOKEN>"
+
+# E — any customer token, expect 403 (get one via a normal customer login first)
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/stats" -H "Authorization: Bearer <CUSTOMER TOKEN>"
+
+# F — no token at all, expect 401
+curl.exe -s -o NUL -w "%{http_code}`n" "$API/api/admin/stats"
+```
+
+**Bash / macOS / Linux**:
 ```bash
 API=https://hunarhub-api-s03k.onrender.com
 
@@ -81,7 +148,7 @@ API=https://hunarhub-api-s03k.onrender.com
 curl -s -o /dev/null -w "%{http_code}\n" -X POST "$API/api/auth/login" -H "Content-Type: application/json" \
   -d '{"email":"admin@hunarhub.in","password":"<OLD PASSWORD>"}'
 
-# B — old token (the one check that actually proves closure)
+# B — old token (skip if you don't have one — see note above)
 curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats" -H "Authorization: Bearer <OLD TOKEN>"
 
 # C — new login
@@ -93,10 +160,16 @@ curl -s -X POST "$API/api/auth/login" -H "Content-Type: application/json" \
 curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats"    -H "Authorization: Bearer <NEW TOKEN>"
 curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/users"    -H "Authorization: Bearer <NEW TOKEN>"
 curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/listings" -H "Authorization: Bearer <NEW TOKEN>"
+
+# E — any customer token, expect 403 (get one via a normal customer login first)
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats" -H "Authorization: Bearer <CUSTOMER TOKEN>"
+
+# F — no token at all, expect 401
+curl -s -o /dev/null -w "%{http_code}\n" "$API/api/admin/stats"
 ```
 
-None of these commands need to be run from this repo or this machine — any terminal with `curl` works.
-Don't paste real tokens or passwords into a chat, issue tracker, or commit.
+Don't paste real tokens or passwords into a chat, issue tracker, or commit. When reporting results back,
+send only the status codes (`A: 401`, `B: 401`, …) — never the values themselves.
 
 ## 0. Before you deploy
 

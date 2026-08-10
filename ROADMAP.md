@@ -1,9 +1,9 @@
 # HunarHub — Roadmap
 
 _Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), an admin +
-listing-management + backend-tests pass, a CI + repository-portability pass, and a production deployment
-verification pass. Supersedes the original pre-M1 audit — most of P0 and P1 below are now done; this file
-tracks what's actually left._
+listing-management + backend-tests pass, a CI + repository-portability pass, a production deployment
+verification pass, and a real image-uploads + product-gallery pass (M9). Supersedes the original pre-M1
+audit — most of P0 and P1 below are now done; this file tracks what's actually left._
 
 ## Done
 
@@ -25,7 +25,7 @@ tracks what's actually left._
   listings, users by role, orders by status), Users (search/filter by role, verify entrepreneurs), Listings
   (search/filter, cross-seller moderation delete). Backend gained three new endpoints to support it
   (`GET /admin/users`, `GET /admin/listings`, `DELETE /admin/services|products/:id`) plus a richer `/admin/stats`
-- ⬜ Image uploads (still Picsum placeholders)
+- ✅ **Real image uploads + product gallery** (M9) — see the dedicated section below.
 
 **Design system / QA**
 - ✅ Dark mode (CSS variable tokens + `.dark` class), shared primitives (Button/Card/Badge/Avatar/Tabs/Toast/Kpi/
@@ -117,6 +117,48 @@ tracks what's actually left._
   `tokenVersion`/`securityVersion` field checked on every request, or materially shorter token lifetimes —
   not a Redis blacklist, which is unnecessary complexity for this app's scale.
 
+**M9 — real image uploads + product gallery**
+- ✅ **Cloudinary, through the backend** — `POST/PATCH /api/services`, `/api/products` now accept
+  `multipart/form-data` (as well as the original JSON, on the same routes — Multer only engages for
+  multipart requests, so every existing text-only call keeps working unchanged). 5MB/image, JPEG/PNG/WebP/
+  AVIF only, uploaded to `hunarhub/products` or `hunarhub/services`. `CLOUDINARY_API_SECRET` never reaches
+  the frontend — no signed-upload flow was needed since the browser never talks to Cloudinary directly.
+- ✅ **Schema**: both `Service` and `Product` gained `images: [{url, publicId}]` (products capped at 4, first
+  = cover; services capped at 1). The old `Product.image` string field was kept, not removed — `productJson`
+  synthesizes a one-item gallery from it when `images` is empty, so every pre-existing seeded/placeholder
+  listing keeps rendering with zero migration. The moment a seller actually edits that listing's photos, the
+  legacy field is cleared so it can't resurface a since-removed image.
+- ✅ **Gallery editing model** — chose the smallest mechanism that's still genuinely a gallery: PATCH accepts
+  new files (appended) and an optional `keepImages` (JSON array of publicIds to retain — omitted means
+  "don't touch images at all," so a plain price edit never risks the gallery). Replace = remove + add in one
+  request; the cap is checked before any upload runs, so a rejected request never wastes an upload.
+- ✅ **Ownership + authorization** — image mutations sit behind the exact same `authRequired` +
+  `requireRole('entrepreneur')` + owner-id check every other listing mutation already used; nothing new to
+  bypass. Verified by test, not just code inspection (see below).
+- ✅ **Cleanup** — deleting a listing, replacing an image, or pruning one via `keepImages` deletes the
+  matching Cloudinary asset after the DB write succeeds, never before, and never as a reason to fail the
+  request if Cloudinary cleanup itself hiccups (best-effort, logged, swallowed).
+- ✅ **Seller UI** — `ImageUploadField` (new, shared component): file picker behind an accessible `<label>`,
+  live preview via object URLs (cleaned up on unmount), per-image remove, a "Cover"/"New" badge, max-count
+  enforcement, and a client-side type/size check ahead of the server one (real defense-in-depth — verified in
+  a test that a mismatched file reaches the component's own validation branch even when the browser's
+  `accept` filter would normally have blocked the picker from offering it at all). Reused by both the
+  service (max 1) and product (max 4) forms in the existing `ListingsManager` — no new form/modal system.
+- ✅ **Customer-facing** — Profile's Products tab shows the real cover image (Picsum fallback only if a
+  listing truly has none) with a photo-count badge; the lightbox is now a real multi-image gallery
+  (thumbnail strip, click to switch, correct `aria-current`); Services tab shows a small thumbnail per row.
+  Alt text throughout is `"{name} by {maker}"` / `"{name} photo N"` — never `alt="image"`.
+- ✅ **Admin** — a single thumbnail per listing row in the moderation table (not a gallery — a moderator
+  doesn't need one to identify a row).
+- ✅ **Tests** — 15 new backend tests (customer/cross-seller authorization on uploads, gallery append/prune/
+  cap, MIME + size rejection, Cloudinary cleanup on delete, legacy-field fallback serialization — Cloudinary
+  itself fully mocked, never a real network call) + 7 new frontend tests (`ImageUploadField` render/preview/
+  validation/max-count, `api.ts` FormData handling). 55 backend / 19 frontend total, zero regressions.
+- 📝 **Known gap, not fixed this pass**: a seller can't remove a *legacy* placeholder image without also
+  uploading a replacement (removing it via `keepImages` is a no-op against a real `images` array that's
+  already empty for a legacy-only listing — the fallback is display-only, not a real array entry to prune).
+  Low-impact: only affects listings that predate this milestone and haven't had their photos touched since.
+
 ## 🔴 One manual action still required
 
 **Rotating the password alone does not close this incident.** Production needs BOTH the admin password AND
@@ -145,7 +187,11 @@ resolved.
 5. **Observability** — structured logs (`morgan` only today), error tracking (Sentry), a readiness probe
    beyond `/health`.
 6. **`/api/v1` versioning** before any external consumer exists.
-7. **npm audit deferrals** — root has exactly 7 advisories (1 critical + 3 high + 3 moderate — verified via
+7. **Legacy image removal** — found during M9: a listing that predates Cloudinary uploads and still shows
+   its old placeholder can't have that image removed without uploading a replacement first (see M9's Done
+   section above for why). Low-impact, but worth a small explicit "clear legacy image" endpoint if it ever
+   comes up in practice.
+8. **npm audit deferrals** — root has exactly 7 advisories (1 critical + 3 high + 3 moderate — verified via
    `npm audit --json`, not eyeballed):
    - **Critical**: `vitest` — arbitrary file read/execute when `vitest --ui` is listening. This project has
      no `--ui` script and no `@vitest/ui` dependency — not reachable in this project's actual usage.
@@ -160,8 +206,7 @@ resolved.
      forced. Fixing them is a deliberate, separate dependency-upgrade task, not a deployment blocker.
 
 ### P3 — growth features
-8. **Payments** (Razorpay for India) with hold/escrow on service completion.
-9. **Image uploads** via Cloudinary/S3 (products, profile, cover) — replaces Picsum.
+9. **Payments** (Razorpay for India) with hold/escrow on service completion.
 10. **Notifications** (email via Resend/SES; in-app) and **messaging** between customer and entrepreneur.
 11. **SEO/social** — per-page meta/OG tags, sitemap; consider prerendering entrepreneur profile pages.
 

@@ -38,6 +38,7 @@ export default function Profile() {
   const similar = useEntrepreneurs({ cat: data?.entrepreneur.category ?? undefined, sort: 'rating' });
   const [tab, setTab] = useState<TabId>('services');
   const [lightbox, setLightbox] = useState<ProductItem | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
     if (data?.entrepreneur) {
@@ -189,11 +190,21 @@ export default function Profile() {
               <div className="grid max-w-[760px] gap-3">
                 {services.map((s) => (
                   <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 transition-colors hover:border-black">
-                    <div>
-                      <div className="text-[15px] font-medium">{s.name}</div>
-                      <div className="mt-1 flex items-center gap-1 text-[11px] font-mono uppercase tracking-wide text-gray-500">
-                        <Clock size={12} />
-                        {s.dur}
+                    <div className="flex min-w-0 items-center gap-3">
+                      {s.images[0] && (
+                        <img
+                          src={s.images[0].url}
+                          alt={`${s.name} by ${e.name}`}
+                          loading="lazy"
+                          className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-[15px] font-medium">{s.name}</div>
+                        <div className="mt-1 flex items-center gap-1 text-[11px] font-mono uppercase tracking-wide text-gray-500">
+                          <Clock size={12} />
+                          {s.dur}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -219,8 +230,26 @@ export default function Profile() {
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {products.map((p) => (
                   <div key={p.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors hover:border-black">
-                    <button type="button" onClick={() => setLightbox(p)} className="block w-full cursor-zoom-in" aria-label={`View ${p.name}`}>
-                      <img src={p.image || pic(`prod-${p.id}`, 500, 500)} alt={p.name} loading="lazy" className="h-40 w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLightbox(p);
+                        setLightboxIndex(0);
+                      }}
+                      className="relative block w-full cursor-zoom-in"
+                      aria-label={`View ${p.name} — ${p.images.length > 1 ? `${p.images.length} photos` : 'photo'}`}
+                    >
+                      <img
+                        src={p.images[0]?.url || pic(`prod-${p.id}`, 500, 500)}
+                        alt={`${p.name} by ${e.name}`}
+                        loading="lazy"
+                        className="h-40 w-full object-cover"
+                      />
+                      {p.images.length > 1 && (
+                        <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-mono text-white">
+                          1/{p.images.length}
+                        </span>
+                      )}
                     </button>
                     <div className="p-4">
                       <div className="text-[14px] font-medium leading-tight">{p.name}</div>
@@ -296,7 +325,30 @@ export default function Profile() {
           onClick={() => setLightbox(null)}
         >
           <div className="max-w-lg overflow-hidden rounded-2xl bg-white" onClick={(ev) => ev.stopPropagation()}>
-            <img src={lightbox.image || pic(`prod-${lightbox.id}`, 800, 800)} alt={lightbox.name} className="max-h-[70vh] w-full object-contain" />
+            <img
+              src={lightbox.images[lightboxIndex]?.url || lightbox.images[0]?.url || pic(`prod-${lightbox.id}`, 800, 800)}
+              alt={`${lightbox.name} by ${e.name} — photo ${lightboxIndex + 1} of ${lightbox.images.length || 1}`}
+              className="max-h-[70vh] w-full object-contain"
+            />
+            {lightbox.images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto border-t border-gray-100 px-4 py-3">
+                {lightbox.images.map((img, i) => (
+                  <button
+                    key={img.publicId ?? img.url}
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    aria-label={`Show photo ${i + 1}`}
+                    aria-current={i === lightboxIndex}
+                    className={cn(
+                      'h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors',
+                      i === lightboxIndex ? 'border-black' : 'border-transparent opacity-70 hover:opacity-100',
+                    )}
+                  >
+                    <img src={img.url} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center justify-between gap-4 p-4">
               <div>
                 <div className="text-[15px] font-medium">{lightbox.name}</div>

@@ -32,9 +32,17 @@ function ListingRow({ listing }: { listing: AdminListingItem }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
-          {listing.kind === 'service' ? <Wrench size={15} /> : <PackageIcon size={15} />}
-        </span>
+        {listing.image ? (
+          <img
+            src={listing.image}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
+            {listing.kind === 'service' ? <Wrench size={15} /> : <PackageIcon size={15} />}
+          </span>
+        )}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-[14px] font-medium text-fg">{listing.name}</span>

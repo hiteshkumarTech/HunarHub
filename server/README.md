@@ -13,8 +13,8 @@ REST backend for HunarHub. **Express 4 · Mongoose 8 · JWT auth · Zod validati
 | `GET` | `/api/entrepreneurs` | — | Browse (`?cat=&q=&maxPrice=&sort=rating\|priceLow\|exp`) |
 | `GET` | `/api/entrepreneurs/:id` | — | Profile + services + products + reviews |
 | `PATCH` | `/api/entrepreneurs/me` | entrepreneur | Update own profile / availability |
-| `POST` `PATCH` `DELETE` | `/api/services` `/:id` | entrepreneur | Manage own services |
-| `POST` `PATCH` `DELETE` | `/api/products` `/:id` | entrepreneur | Manage own products |
+| `POST` `PATCH` `DELETE` | `/api/services` `/:id` | entrepreneur | Manage own services — accepts JSON or `multipart/form-data` with an `image` file (1 photo max) |
+| `POST` `PATCH` `DELETE` | `/api/products` `/:id` | entrepreneur | Manage own products — accepts JSON or `multipart/form-data` with `images` files (4 max, first = cover) |
 | `POST` | `/api/orders` | customer | Place service request / product order |
 | `GET` | `/api/orders/mine` | customer | Customer's orders |
 | `GET` | `/api/orders/incoming` | entrepreneur | Incoming requests |
@@ -30,6 +30,16 @@ REST backend for HunarHub. **Express 4 · Mongoose 8 · JWT auth · Zod validati
 
 Send the token as `Authorization: Bearer <token>`.
 
+## Image uploads
+
+Product/service photos go through Cloudinary (`config/cloudinary.ts`) — the browser never talks to Cloudinary
+directly, only through these same `services`/`products` routes. Requires three env vars (`CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — see `.env.example`); without them, every other route still works
+normally and only the upload endpoints return a clear `503` instead of the server failing to boot. 5MB max per
+image, JPEG/PNG/WebP/AVIF only, uploaded to `hunarhub/products` or `hunarhub/services`. Deleting a listing (or
+replacing/removing one of its images) cleans up the matching Cloudinary asset — best-effort, never blocks the
+database write.
+
 ## Tests
 
 ```bash
@@ -39,7 +49,9 @@ npm run typecheck
 
 Covers auth (register/login/session), role authorization (customer/entrepreneur rejected from admin routes),
 listing ownership (an entrepreneur can't edit or delete another seller's service/product), the order lifecycle
-and cross-seller isolation, and the earned-review rule. Each suite gets its own in-memory MongoDB instance.
+and cross-seller isolation, the earned-review rule, and image uploads (ownership on upload/replace/remove,
+MIME/size validation, gallery cap, Cloudinary cleanup on delete — Cloudinary itself is mocked, never called for
+real). Each suite gets its own in-memory MongoDB instance.
 
 ## Run locally
 
@@ -88,10 +100,11 @@ Once it's live, give me the Render URL and I'll add an API client + auth to the 
 ```
 server/src/
   index.ts app.ts
-  config/    env.ts db.ts
-  middleware/ auth.ts error.ts validate.ts
+  config/    env.ts db.ts cloudinary.ts
+  middleware/ auth.ts error.ts validate.ts upload.ts (multer)
   models/    User.ts Service.ts Product.ts Order.ts Review.ts
   routes/    index.ts auth.ts entrepreneurs.ts services.ts products.ts orders.ts reviews.ts admin.ts
-  utils/     ApiError.ts asyncHandler.ts token.ts serialize.ts
+  utils/     ApiError.ts asyncHandler.ts token.ts serialize.ts imageGallery.ts
+  scripts/   setAdminPassword.ts  (rotate the admin password without a full reseed)
   seed/      seed.ts
 ```

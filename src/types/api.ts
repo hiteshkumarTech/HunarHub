@@ -67,18 +67,26 @@ export interface EntrepreneurDetail extends EntrepreneurCard {
   bio: string;
 }
 
+/** publicId is null for images that predate Cloudinary uploads — nothing to delete server-side. */
+export interface ListingImage {
+  url: string;
+  publicId: string | null;
+}
+
 export interface ServiceItem {
   id: string;
   name: string;
   price: number;
   dur: string;
+  images: ListingImage[];
 }
 
 export interface ProductItem {
   id: string;
   name: string;
   price: number;
-  image: string;
+  /** images[0] is the cover image — up to 4 total. */
+  images: ListingImage[];
 }
 
 export interface PersonRef {

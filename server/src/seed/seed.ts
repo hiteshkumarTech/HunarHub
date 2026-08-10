@@ -111,9 +111,25 @@ async function run() {
         ratingCount: e.reviews,
       },
     });
-    await Service.insertMany(e.services.map((s) => ({ ...s, entrepreneur: user._id })));
+    // publicId: null on these — they're Picsum placeholder URLs, not real
+    // Cloudinary assets, so there's nothing to delete if they're ever
+    // replaced. Same convention the API uses for any pre-Cloudinary image.
+    await Service.insertMany(
+      e.services.map((s, i) => ({
+        ...s,
+        entrepreneur: user._id,
+        images: i === 0 ? [{ url: pic(`svc-${e.id}-${i}`, 500, 400), publicId: null }] : [],
+      })),
+    );
     await Product.insertMany(
-      e.products.map((p, i) => ({ ...p, image: pic(`prod-${e.id}-${i}`, 500, 500), entrepreneur: user._id })),
+      e.products.map((p, i) => ({
+        ...p,
+        entrepreneur: user._id,
+        images: [
+          { url: pic(`prod-${e.id}-${i}-0`, 500, 500), publicId: null },
+          { url: pic(`prod-${e.id}-${i}-1`, 500, 500), publicId: null },
+        ],
+      })),
     );
   }
 

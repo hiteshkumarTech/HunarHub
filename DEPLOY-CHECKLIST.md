@@ -174,7 +174,7 @@ send only the status codes (`A: 401`, `B: 401`, …) — never the values themse
 ## 0. Before you deploy
 
 - [ ] `npm run typecheck && npm test && npm run build` passes at the repo root (frontend).
-- [ ] `cd server && npm run typecheck && npm test` passes (40 tests, isolated in-memory MongoDB).
+- [ ] `cd server && npm run typecheck && npm test` passes (55 tests, isolated in-memory MongoDB).
 - [ ] CI is green on the commit you're deploying — check the Actions tab, or
       `curl https://api.github.com/repos/hiteshkumarTech/HunarHub/commits/<sha>/check-runs` (public API, no
       auth needed for a public repo).
@@ -219,6 +219,12 @@ Uses the committed Blueprint at `server/render.yaml` — New → Blueprint → p
   - [ ] `NODE_ENV=production`, `NODE_VERSION=22`, `JWT_EXPIRES_IN=7d` — set by the blueprint, confirm
         they're present. `NODE_VERSION` pins the same major version CI tests against; without it, Render
         falls back to its own platform default, which can silently drift from what's actually tested.
+  - [ ] `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — from your Cloudinary
+        dashboard (cloudinary.com → Dashboard, free tier is enough). **Not** in the Blueprint's `envVars`
+        (nothing to sync) — add all three directly in the Render dashboard. These are optional in the sense
+        that the server still boots and every other route works without them — only `POST`/`PATCH
+        /api/services` and `/api/products` with an image attached fail (a clear `503`, not a crash) until
+        they're set.
 - [ ] Build command is `npm ci` (not `npm install`) — deterministic, fails loudly on a lockfile mismatch
       instead of silently installing something CI never tested.
 - [ ] Health check path is `/health` (already set in the blueprint) — Render polls this to know the service
@@ -261,6 +267,9 @@ Uses the committed Blueprint at `server/render.yaml` — New → Blueprint → p
 | `ADMIN_SEED_PASSWORD` | `server/src/seed/seed.ts` | No — a random one is generated and printed once if unset | Recommended so you choose the password rather than reading it off a console log. Rejected outright if it's under 12 characters or a common default (`password123`, `admin123`, …) — can't reintroduce the original vulnerability by accident | **Never** — it's a password |
 | `NEW_ADMIN_PASSWORD` | `server/src/scripts/setAdminPassword.ts` | No — omit it and the script prompts interactively with the input hidden (preferred; never touches shell history) | — (one-off script, not a running service). Same weak-password rejection as `ADMIN_SEED_PASSWORD` | **Never** |
 | `NODE_VERSION` | Render platform (build-time only) | N/A | Recommended — pins the runtime to match CI | N/A |
+| `CLOUDINARY_CLOUD_NAME` | `server/src/config/cloudinary.ts` | No — image uploads just 503 without it | Required for image uploads to work; everything else still boots and runs fine without it | N/A, not sensitive on its own, but keep it server-side with the other two |
+| `CLOUDINARY_API_KEY` | `server/src/config/cloudinary.ts` | No — same as above | Required for image uploads | **Never** |
+| `CLOUDINARY_API_SECRET` | `server/src/config/cloudinary.ts` | No — same as above | Required for image uploads | **Never** — this is the one that actually authorizes account-level actions |
 
 ## 5. Post-deploy smoke test
 
@@ -280,6 +289,11 @@ plan) — see the M8 milestone report for the full transcript. To repeat it your
 - [ ] Sign in as `priya@example.com` / `password123` → request a service → toast confirms it.
 - [ ] Sign in as `ramesh@hunarhub.in` / `password123` → `/dashboard` → the request appears → Accept → Mark
       complete → try the listings manager (add/edit/delete a listing).
+- [ ] Same session: add a product with a real photo → save → confirm the cover image renders in the listings
+      manager row, then on the maker's own `/profile/:id` Products tab, and that a second uploaded photo
+      shows the multi-image badge + gallery thumbnails in the lightbox. Edit the listing to remove the photo,
+      confirm it's gone everywhere above. If `CLOUDINARY_*` isn't configured yet, this step fails with a
+      clear `503` rather than a crash — that's expected, not a bug; add the env vars and retry.
 - [ ] Back as Priya → `/orders` → status shows "Completed" → leave a review → it appears on the maker's
       profile and their rating updates.
 - [ ] Sign in with your rotated admin credentials → `/admin` → Overview shows real counts, Users/Listings

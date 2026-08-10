@@ -18,7 +18,7 @@ dashboard were all tested against these exact URLs, not just deployed and assume
 Motion (Framer Motion) · lucide-react · Vitest + Testing Library.
 
 **Backend** (`/server`) — Express 4 · MongoDB + Mongoose 8 · JWT auth · Zod validation · Helmet · rate limiting ·
-mongo-sanitize · TypeScript, run via `tsx`.
+mongo-sanitize · Cloudinary (image uploads, via Multer) · TypeScript, run via `tsx`.
 
 ## Run locally
 
@@ -90,8 +90,9 @@ Browser (Vercel)                          API (Render)                    MongoD
 - **Regex search, not full-text/Atlas Search** — `GET /api/entrepreneurs?q=` matches name/craft/city/state via a
   case-insensitive regex `$or`. Fine at this data scale; a `$text` or Atlas Search index would scale better and
   is a clean drop-in later (a text index already exists on `User`, just unused by the query).
-- **No image uploads** — product/profile photos are grayscale Picsum placeholders (`pic()` in `src/lib/utils.ts`).
-  Swap for Cloudinary/S3 without touching component code.
+- **Cloudinary uploads flow through the backend, not signed client-side** — simpler (no signing endpoint, no
+  Cloudinary widget on the frontend) and keeps `CLOUDINARY_API_SECRET` server-only. Fine at this traffic scale;
+  a signed direct-to-Cloudinary upload would offload bandwidth from Render if that ever became the bottleneck.
 
 ## Project structure
 
@@ -107,7 +108,7 @@ src/
 ├─ data/mockData.ts         # seed/fallback data (landing page graceful-degrades to this if the API is cold)
 ├─ components/
 │  ├─ ui/                   # Button, Card, Badge, Avatar, Tabs, StatusBadge, Toast, States, Field, Kpi,
-│  │                         # ConfirmAction, ThemeToggle
+│  │                         # ConfirmAction, ImageUploadField, ThemeToggle
 │  ├─ landing/               # HeroSection, FeaturedEntrepreneurs, TrendingProducts, Testimonials, …
 │  ├─ admin/                 # AdminOverview, AdminUsersPanel, AdminListingsPanel (used by /admin)
 │  ├─ dashboard/             # ListingsManager — entrepreneur's own create/edit/delete UI
@@ -118,11 +119,11 @@ src/
 server/
 ├─ src/
 │  ├─ app.ts, index.ts       # Express app wiring, entry point
-│  ├─ config/                # db.ts (Mongoose connect), env.ts (fail-fast env validation)
-│  ├─ middleware/            # auth (JWT), rateLimit, sanitize (mongo-sanitize), validate (Zod), error
+│  ├─ config/                # db.ts (Mongoose connect), env.ts (fail-fast env validation), cloudinary.ts
+│  ├─ middleware/            # auth (JWT), rateLimit, sanitize (mongo-sanitize), validate (Zod), upload (Multer), error
 │  ├─ models/                # User (embeds entrepreneur profile), Order, Review, Service, Product, Favorite
 │  ├─ routes/                # auth, entrepreneurs, services, products, orders, reviews, favorites, admin
-│  ├─ utils/                 # ApiError, asyncHandler, serialize (Mongoose doc → API JSON), token
+│  ├─ utils/                 # ApiError, asyncHandler, serialize (Mongoose doc → API JSON), token, imageGallery
 │  ├─ test/                  # db.ts (in-memory MongoDB harness), fixtures.ts (seed users + tokens)
 │  ├─ seed/seed.ts           # demo data incl. the customer/entrepreneur accounts above (admin gets its
 │  │                         # own generated password — never the public demo one, see DEPLOY-CHECKLIST.md)
@@ -154,7 +155,7 @@ server/
 | `GET /entrepreneurs` | — | List, filtered/sorted/paginated (`cat`, `q`, `maxPrice`, `sort`, `verified`, `available`, `page`, `limit`) |
 | `GET /entrepreneurs/:id` | — | Profile + services + products + reviews |
 | `PATCH /entrepreneurs/me` | Entrepreneur | Update own profile / availability |
-| `POST/PATCH/DELETE /services`, `/products` | Entrepreneur | Manage listings |
+| `POST/PATCH/DELETE /services`, `/products` | Entrepreneur | Manage listings — JSON or `multipart/form-data` with image file(s); products get a 4-image gallery (first = cover), services get 1 photo |
 | `POST /orders` | Customer | Place a service request / product order |
 | `GET /orders/mine` | Customer | Own order history |
 | `GET /orders/incoming` | Entrepreneur | Requests received |
@@ -176,17 +177,21 @@ npm test               # frontend — Vitest + Testing Library
 cd server && npm test  # backend — Vitest + Supertest + mongodb-memory-server (in-memory, never a real DB)
 ```
 
-Frontend coverage: `lib/api.test.ts` (fetch client / error normalisation), `lib/recentlyViewed.test.ts`,
-`pages/Landing.test.tsx` (smoke test — every marketing section renders), `components/ui/StatusBadge.test.tsx`,
-`components/ui/Tabs.test.tsx` (ARIA roles + keyboard nav).
+Frontend coverage (19 tests): `lib/api.test.ts` (fetch client / error normalisation, FormData vs JSON bodies),
+`lib/recentlyViewed.test.ts`, `pages/Landing.test.tsx` (smoke test — every marketing section renders),
+`components/ui/StatusBadge.test.tsx`, `components/ui/Tabs.test.tsx` (ARIA roles + keyboard nav),
+`components/ui/ImageUploadField.test.tsx` (renders, preview on select, existing-image alt text, validation error,
+max-count enforcement).
 
-Backend coverage (40 tests, `server/src/routes/*.test.ts`) prioritises the highest-risk behavior over line
+Backend coverage (55 tests, `server/src/routes/*.test.ts`) prioritises the highest-risk behavior over line
 coverage: auth (register/login/session, can't self-register as admin), role authorization (customer/entrepreneur
 rejected from admin routes), listing ownership (an entrepreneur can edit/delete their own service or product but
 gets a 403 touching another seller's — verified against the DB state, not just the response code), the order
-lifecycle and cross-seller isolation, the earned-review rule, and the new admin routes (stats reflect real counts,
-not fabricated numbers; moderation delete; role/search filters). Each suite boots its own in-memory MongoDB
-instance via `mongodb-memory-server` — nothing here ever touches a real database, local or production.
+lifecycle and cross-seller isolation, the earned-review rule, the admin routes (stats reflect real counts, not
+fabricated numbers; moderation delete; role/search filters), and image uploads (ownership on upload/replace/
+remove, MIME/size validation, the 4-image gallery cap, Cloudinary cleanup on delete — Cloudinary is fully mocked,
+never called for real). Each suite boots its own in-memory MongoDB instance via `mongodb-memory-server` —
+nothing here ever touches a real database, local or production.
 
 **CI** (`.github/workflows/ci.yml`) runs both suites — plus typecheck and the production build — on every pull
 request and every push to `main`. No secrets required: the frontend build needs none, and the backend's
@@ -218,5 +223,11 @@ provisioning is now separate from the public demo accounts. That fix is in the c
 password change alone doesn't invalidate a token issued before rotation); full runbook in
 `DEPLOY-CHECKLIST.md`.
 
-Remaining work — payments, image uploads, messaging, observability, i18n — is tracked in
-[ROADMAP.md](./ROADMAP.md).
+Most recently, **real image uploads + a product gallery** (M9): sellers upload actual photos (Cloudinary, via
+the backend — never a raw URL paste) for their services (1 photo) and products (up to 4, first = cover),
+with a preview/remove/replace UI in the existing listing manager, ownership enforced server-side the same way
+every other listing mutation already was, and old seeded/placeholder listings still rendering unchanged
+(nothing required a destructive migration). Customers see the real photos on Browse → profile → Products/
+Services, with a lightbox gallery for multi-image products; admin sees a thumbnail per listing row.
+
+Remaining work — payments, messaging, observability, i18n — is tracked in [ROADMAP.md](./ROADMAP.md).

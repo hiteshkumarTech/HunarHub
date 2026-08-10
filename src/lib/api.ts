@@ -47,15 +47,19 @@ export class ApiError extends Error {
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = tokenStore.get();
+  // FormData (image uploads) must NOT be JSON-stringified, and its
+  // Content-Type (with the multipart boundary) must be left for the browser
+  // to set automatically — setting it manually breaks the boundary.
+  const isFormData = body instanceof FormData;
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method,
       headers: {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, 'Network error — could not reach the server. Please try again.');

@@ -9,6 +9,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { authRequired, requireRole } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { entrepreneurCard, adminUserJson, adminListingJson } from '../utils/serialize';
+import { deleteImages } from '../utils/imageGallery';
 import { ApiError } from '../utils/ApiError';
 
 const router = Router();
@@ -119,7 +120,9 @@ router.delete(
   asyncHandler(async (req, res) => {
     const service = await Service.findById(req.params.id).catch(() => null);
     if (!service) throw new ApiError(404, 'Service not found');
+    const images = service.images;
     await service.deleteOne();
+    await deleteImages(images);
     res.json({ ok: true });
   }),
 );
@@ -129,7 +132,9 @@ router.delete(
   asyncHandler(async (req, res) => {
     const product = await Product.findById(req.params.id).catch(() => null);
     if (!product) throw new ApiError(404, 'Product not found');
+    const images = product.images;
     await product.deleteOne();
+    await deleteImages(images);
     res.json({ ok: true });
   }),
 );

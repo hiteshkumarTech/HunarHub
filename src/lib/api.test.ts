@@ -29,4 +29,18 @@ describe('api client', () => {
     await expect(api.get('/api/test')).rejects.toBeInstanceOf(ApiError);
     await expect(api.get('/api/test')).rejects.toMatchObject({ status: 400, message: 'Nope' });
   });
+
+  it('sends FormData bodies (image uploads) as-is, without JSON.stringify or a manual Content-Type', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const fd = new FormData();
+    fd.append('name', 'Painted Planter');
+    await api.post('/api/products', fd);
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBe(fd); // not JSON.stringify'd
+    // No Content-Type set manually — the browser must supply the multipart boundary itself.
+    expect(init.headers).not.toHaveProperty('Content-Type');
+  });
 });

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Plus, Pencil, Wrench, Package as PackageIcon } from 'lucide-react';
 import { Field, TextInput } from '../ui/Field';
+import { ImageUploadField } from '../ui/ImageUploadField';
 import { ConfirmAction } from '../ui/ConfirmAction';
 import { buttonStyles } from '../ui/button';
 import { useToast } from '../ui/Toast';
@@ -13,26 +14,35 @@ import {
   useDeleteProduct,
 } from '../../hooks/listings';
 import { inr } from '../../lib/utils';
-import type { ProductItem, ServiceItem } from '../../types/api';
+import type { ListingImage, ProductItem, ServiceItem } from '../../types/api';
 
 type Kind = 'service' | 'product';
 type Listing = (ServiceItem & { kind: 'service' }) | (ProductItem & { kind: 'product' });
+
+const PRODUCT_MAX_IMAGES = 4;
+const SERVICE_MAX_IMAGES = 1;
 
 interface FormValues {
   name: string;
   price: string;
   dur: string;
-  image: string;
+  existingImages: ListingImage[];
+  stagedFiles: File[];
+  imagesTouched: boolean;
 }
 
-const EMPTY_FORM: FormValues = { name: '', price: '', dur: '', image: '' };
+function emptyForm(): FormValues {
+  return { name: '', price: '', dur: '', existingImages: [], stagedFiles: [], imagesTouched: false };
+}
 
 function toFormValues(item: Listing): FormValues {
   return {
     name: item.name,
     price: String(item.price),
     dur: item.kind === 'service' ? item.dur : '',
-    image: item.kind === 'product' ? item.image : '',
+    existingImages: item.images,
+    stagedFiles: [],
+    imagesTouched: false,
   };
 }
 
@@ -53,8 +63,9 @@ function ListingForm({
   onSubmit: (values: FormValues) => void;
   pending: boolean;
 }) {
-  const [values, setValues] = useState<FormValues>(initial ?? EMPTY_FORM);
+  const [values, setValues] = useState<FormValues>(initial ?? emptyForm());
   const [error, setError] = useState('');
+  const maxImages = kind === 'service' ? SERVICE_MAX_IMAGES : PRODUCT_MAX_IMAGES;
 
   function set<K extends keyof FormValues>(key: K, v: FormValues[K]) {
     setValues((f) => ({ ...f, [key]: v }));
@@ -66,7 +77,7 @@ function ListingForm({
     const price = Number(values.price);
     if (!values.name.trim()) return setError('Name is required.');
     if (!Number.isFinite(price) || price < 0) return setError('Enter a valid price.');
-    onSubmit({ ...values, name: values.name.trim(), price: String(price) });
+    onSubmit({ ...values, name: values.name.trim() });
   }
 
   return (
@@ -99,20 +110,26 @@ function ListingForm({
           />
         </Field>
       </div>
-      {kind === 'service' ? (
+      {kind === 'service' && (
         <Field label="Duration" htmlFor="listing-dur">
           <TextInput id="listing-dur" value={values.dur} onChange={(e) => set('dur', e.target.value)} placeholder="e.g. 3 days" />
         </Field>
-      ) : (
-        <Field label="Image URL (optional)" htmlFor="listing-image">
-          <TextInput
-            id="listing-image"
-            value={values.image}
-            onChange={(e) => set('image', e.target.value)}
-            placeholder="https://…"
-          />
-        </Field>
       )}
+      <ImageUploadField
+        label={kind === 'service' ? 'Photo' : 'Photos'}
+        altPrefix={values.name || (kind === 'service' ? 'Service' : 'Product')}
+        max={maxImages}
+        disabled={pending}
+        existing={values.existingImages}
+        onRemoveExisting={(i) =>
+          setValues((f) => ({ ...f, imagesTouched: true, existingImages: f.existingImages.filter((_, idx) => idx !== i) }))
+        }
+        staged={values.stagedFiles}
+        onAddFiles={(files) => setValues((f) => ({ ...f, imagesTouched: true, stagedFiles: [...f.stagedFiles, ...files] }))}
+        onRemoveStaged={(i) =>
+          setValues((f) => ({ ...f, imagesTouched: true, stagedFiles: f.stagedFiles.filter((_, idx) => idx !== i) }))
+        }
+      />
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={pending} className={buttonStyles({ size: 'sm', className: 'disabled:opacity-50' })}>
           {pending ? 'Saving…' : 'Save'}
@@ -155,7 +172,7 @@ export function ListingsManager({
     const price = Number(values.price);
     if (kind === 'service') {
       createService.mutate(
-        { name: values.name, price, dur: values.dur.trim() || undefined },
+        { name: values.name, price, dur: values.dur.trim() || undefined, image: values.stagedFiles[0] },
         {
           onSuccess: () => {
             toast('Service added.', 'success');
@@ -166,7 +183,7 @@ export function ListingsManager({
       );
     } else {
       createProduct.mutate(
-        { name: values.name, price, image: values.image.trim() || undefined },
+        { name: values.name, price, newImages: values.stagedFiles },
         {
           onSuccess: () => {
             toast('Product added.', 'success');
@@ -182,7 +199,14 @@ export function ListingsManager({
     const price = Number(values.price);
     if (kind === 'service') {
       updateService.mutate(
-        { id, name: values.name, price, dur: values.dur.trim() || undefined },
+        {
+          id,
+          name: values.name,
+          price,
+          dur: values.dur.trim() || undefined,
+          image: values.stagedFiles[0],
+          removeImage: values.imagesTouched && !values.stagedFiles.length && values.existingImages.length === 0,
+        },
         {
           onSuccess: () => {
             toast('Service updated.', 'success');
@@ -193,7 +217,15 @@ export function ListingsManager({
       );
     } else {
       updateProduct.mutate(
-        { id, name: values.name, price, image: values.image.trim() || undefined },
+        {
+          id,
+          name: values.name,
+          price,
+          newImages: values.stagedFiles,
+          keepImagePublicIds: values.imagesTouched
+            ? values.existingImages.map((img) => img.publicId).filter((id): id is string => id !== null)
+            : undefined,
+        },
         {
           onSuccess: () => {
             toast('Product updated.', 'success');
@@ -263,11 +295,14 @@ export function ListingsManager({
         <div className="divide-y divide-line">
           {listings.map((item) => {
             const isEditing = editing?.kind === item.kind && editing.id === item.id;
+            const cover = item.images[0];
             return (
               <div key={`${item.kind}-${item.id}`}>
                 <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-                  <div className="flex min-w-0 items-center gap-2 text-[13px]">
-                    {item.kind === 'service' ? (
+                  <div className="flex min-w-0 items-center gap-3 text-[13px]">
+                    {cover ? (
+                      <img src={cover.url} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />
+                    ) : item.kind === 'service' ? (
                       <Wrench size={13} className="shrink-0 text-muted" />
                     ) : (
                       <PackageIcon size={13} className="shrink-0 text-muted" />

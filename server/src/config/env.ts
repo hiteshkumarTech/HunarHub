@@ -32,4 +32,13 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  // Deliberately NOT fail-fast like MONGODB_URI/JWT_SECRET above: image uploads
+  // are one feature, not the whole API. Missing Cloudinary config should only
+  // break the upload endpoints (a clear 503 there — see config/cloudinary.ts),
+  // not crash-loop the entire server on every other route (auth, orders, browse).
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+    apiKey: process.env.CLOUDINARY_API_KEY ?? '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+  },
 };

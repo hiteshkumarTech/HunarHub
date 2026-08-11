@@ -29,7 +29,15 @@ export function uploadImageBuffer(buffer: Buffer, folder: string): Promise<Uploa
     const stream = cloudinary.uploader.upload_stream(
       { folder, resource_type: 'image' },
       (err, result) => {
-        if (err || !result) return reject(err ?? new Error('Cloudinary upload returned no result'));
+        if (err || !result) {
+          // A file that passes our own MIME-type/size filter can still fail
+          // here — e.g. correctly-typed bytes that aren't actually a
+          // decodable image. That's a client input problem, not a server
+          // crash, so it must not fall through to a raw 500. Log the real
+          // Cloudinary error for diagnosability; never expose it to the caller.
+          console.error('[cloudinary] Upload rejected:', err ?? 'no result returned');
+          return reject(new ApiError(422, 'Could not process this image — the file may be corrupted or in an unsupported format.'));
+        }
         resolve({ url: result.secure_url, publicId: result.public_id });
       },
     );

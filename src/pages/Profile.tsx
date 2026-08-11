@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight, Plus, MapPin, Check, Clock, X, Loader2 } from 'lucide-react';
 import { PageBar } from '../components/PageBar';
@@ -7,6 +7,7 @@ import { Stars } from '../components/Stars';
 import { CatIcon } from '../components/craftIcons';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { EntrepreneurCardTile } from '../components/EntrepreneurCardTile';
+import { ServiceRequestDialog } from '../components/ServiceRequestDialog';
 import { Skeleton, ErrorState, EmptyState } from '../components/ui/States';
 import { Tabs, TabPanel } from '../components/ui/Tabs';
 import { useToast } from '../components/ui/Toast';
@@ -39,17 +40,19 @@ export default function Profile() {
   const [tab, setTab] = useState<TabId>('services');
   const [lightbox, setLightbox] = useState<ProductItem | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  // Tracks which specific service/product is mid-request, so the shared
-  // createOrder mutation's isPending flag (true for ALL buttons at once,
-  // since one mutation instance backs every Request/Buy button on this page)
-  // can still show "Sending…" on only the one the visitor actually clicked.
+  // Tracks which specific product is mid-purchase, so the shared createOrder
+  // mutation's isPending flag (true for ALL buttons at once, since one
+  // mutation instance backs every Buy/Send-Request action on this page) can
+  // still show a per-item "Sending…" only on the one actually clicked.
+  // Services no longer need this — requesting one now goes through
+  // ServiceRequestDialog, which has its own single Send Request button.
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
-  // Anchors the sticky bottom CTA's scroll/focus target — stays mounted
-  // regardless of which tab is active (unlike the TabPanels themselves,
-  // which unmount when inactive), so it's a stable target to scroll to.
-  const servicesSectionRef = useRef<HTMLDivElement>(null);
-  const firstRequestButtonRef = useRef<HTMLButtonElement>(null);
-  const [pendingScrollToServices, setPendingScrollToServices] = useState(false);
+  // Which service (if any) the request dialog opens pre-selected to — set
+  // when opened from that service's own Request button; left undefined when
+  // opened from the sticky CTA, so the dialog shows its picker first (unless
+  // there's only one service, which it auto-selects itself).
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
+  const [requestDialogServiceId, setRequestDialogServiceId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (data?.entrepreneur) {
@@ -57,23 +60,6 @@ export default function Profile() {
       pushRecentlyViewed({ id: en.id, name: en.name, craft: en.craft, city: en.city, category: en.category });
     }
   }, [data]);
-
-  // Scroll/focus target for the sticky bottom CTA below — defined up here
-  // (not after the early returns) because every hook in this component must
-  // run unconditionally on every render, in the same order, regardless of
-  // loading/error state.
-  function focusServicesArea() {
-    servicesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    firstRequestButtonRef.current?.focus({ preventScroll: true });
-  }
-
-  useEffect(() => {
-    if (tab === 'services' && pendingScrollToServices) {
-      focusServicesArea();
-      setPendingScrollToServices(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, pendingScrollToServices]);
 
   if (isLoading) {
     return (
@@ -116,15 +102,25 @@ export default function Profile() {
     return true;
   };
 
-  const requestService = (s: ServiceItem) => {
+  // Opens the confirmation dialog — nothing is submitted until the visitor
+  // explicitly clicks "Send Request" inside it. `serviceId` pre-selects that
+  // one service (from its own Request button); omitted, the dialog shows a
+  // picker first when there's more than one service.
+  const openRequestDialog = (serviceId?: string) => {
     if (!requireCustomer()) return;
-    setPendingItemId(s.id);
+    setRequestDialogServiceId(serviceId);
+    setRequestDialogOpen(true);
+  };
+
+  const submitServiceRequest = (s: ServiceItem, note: string) => {
     createOrder.mutate(
-      { entrepreneurId: e.id, kind: 'service', itemId: s.id },
+      { entrepreneurId: e.id, kind: 'service', itemId: s.id, note: note || undefined },
       {
-        onSuccess: () => toast(`Request sent to ${e.name} for “${s.name}” — track it on My Orders.`, 'success'),
+        onSuccess: () => {
+          setRequestDialogOpen(false);
+          toast(`Request sent to ${e.name} for “${s.name}” — track it on My Orders.`, 'success');
+        },
         onError: (err) => toast(err instanceof Error ? err.message : 'Could not place request.', 'error'),
-        onSettled: () => setPendingItemId(null),
       },
     );
   };
@@ -144,23 +140,6 @@ export default function Profile() {
       },
     );
   };
-
-  // The sticky bottom CTA used to just call setTab('services') — a no-op
-  // when Services was already the active tab, so clicking it there visibly
-  // did nothing. Now it always does something useful: switch tabs if
-  // needed, then scroll the services list into view and focus the first
-  // Request button so keyboard users land somewhere actionable too. It
-  // never auto-submits a request on the visitor's behalf, even when there's
-  // only one service — the visitor still has to choose and click Request.
-  function handleStickyServiceCta() {
-    if (services.length === 0) return;
-    if (tab !== 'services') {
-      setTab('services');
-      setPendingScrollToServices(true);
-    } else {
-      focusServicesArea();
-    }
-  }
 
   return (
     <div className="min-h-screen">
@@ -231,13 +210,13 @@ export default function Profile() {
           }))}
         />
 
-        <div ref={servicesSectionRef} className="py-8">
+        <div className="py-8">
           <TabPanel id="services" activeId={tab} idPrefix="profile">
             {services.length === 0 ? (
               <EmptyState title="No services listed yet" />
             ) : (
               <div className="grid max-w-[760px] gap-3">
-                {services.map((s, i) => (
+                {services.map((s) => (
                   <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 transition-colors hover:border-black">
                     <div className="flex min-w-0 items-center gap-3">
                       {s.images[0] && (
@@ -259,12 +238,10 @@ export default function Profile() {
                     <div className="flex items-center gap-4">
                       <div className="text-[16px] font-semibold">{inr(s.price)}</div>
                       <button
-                        ref={i === 0 ? firstRequestButtonRef : undefined}
-                        onClick={() => requestService(s)}
-                        disabled={createOrder.isPending}
-                        className="min-w-[84px] rounded-md bg-[#111] px-4 py-2 text-[11px] font-mono uppercase tracking-widest text-white hover:bg-black disabled:opacity-50"
+                        onClick={() => openRequestDialog(s.id)}
+                        className="rounded-md bg-[#111] px-4 py-2 text-[11px] font-mono uppercase tracking-widest text-white hover:bg-black"
                       >
-                        {pendingItemId === s.id ? 'Sending…' : 'Request'}
+                        Request
                       </button>
                     </div>
                   </div>
@@ -365,13 +342,23 @@ export default function Profile() {
           <span className="text-[13px] italic text-gray-400">No services listed yet</span>
         ) : (
           <button
-            onClick={handleStickyServiceCta}
+            onClick={() => openRequestDialog()}
             className="flex items-center gap-2 rounded-md bg-[#111] px-6 py-3 text-[13px] font-medium text-white hover:bg-black"
           >
             Request a service <ArrowRight size={16} />
           </button>
         )}
       </div>
+
+      <ServiceRequestDialog
+        open={requestDialogOpen}
+        onClose={() => setRequestDialogOpen(false)}
+        entrepreneurName={e.name}
+        services={services}
+        initialServiceId={requestDialogServiceId}
+        onSubmit={submitServiceRequest}
+        pending={createOrder.isPending}
+      />
 
       {lightbox && (
         <div

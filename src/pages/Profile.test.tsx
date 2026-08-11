@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -61,18 +61,22 @@ const ORDER_RESPONSE = { order: { id: 'order1', kind: 'service', title: 'x', pri
 
 /** Base fetch mock: auth session (or none), entrepreneur detail, the "similar
  *  makers" browse query, and a normal (immediately resolving) order POST. */
-function mockFetch({ user }: { user: typeof CUSTOMER | typeof ENTREPRENEUR_USER | null }) {
+function mockFetch({ user, services = SERVICES }: { user: typeof CUSTOMER | typeof ENTREPRENEUR_USER | null; services?: typeof SERVICES }) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     const path = url.replace(API_URL, '');
     if (path === '/api/auth/me') return user ? json({ user }) : new Response(null, { status: 401 });
     if (path.startsWith('/api/entrepreneurs/ramesh') && method === 'GET') {
-      return json({ entrepreneur: ENTREPRENEUR, services: SERVICES, products: PRODUCTS, reviews: [] });
+      return json({ entrepreneur: ENTREPRENEUR, services, products: PRODUCTS, reviews: [] });
     }
     if (path.startsWith('/api/entrepreneurs?')) return json({ entrepreneurs: [] });
     if (path === '/api/orders' && method === 'POST') return json(ORDER_RESPONSE);
     throw new Error(`Unhandled fetch in Profile test: ${method} ${path}`);
   });
+}
+
+function findOrderPosts(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.filter(([url, init]: [string, RequestInit?]) => url.endsWith('/api/orders') && init?.method === 'POST');
 }
 
 function renderProfile() {
@@ -95,7 +99,7 @@ function renderProfile() {
   );
 }
 
-describe('Profile — service request flow', () => {
+describe('Profile — service request dialog', () => {
   beforeEach(() => {
     tokenStore.clear();
   });
@@ -104,54 +108,7 @@ describe('Profile — service request flow', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sticky CTA switches to the Services tab and focuses the first Request button when on another tab', async () => {
-    tokenStore.set('tok');
-    vi.stubGlobal('fetch', mockFetch({ user: CUSTOMER }));
-    Element.prototype.scrollIntoView = vi.fn();
-    renderProfile();
-
-    const user = userEvent.setup();
-    await screen.findByText('Custom Terracotta Pot');
-    await user.click(screen.getByRole('tab', { name: 'Products' }));
-    expect(await screen.findByText('Painted Planter')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /request a service/i }));
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: 'Request' })[0]).toHaveFocus();
-    });
-  });
-
-  it('sticky CTA on the Services tab still performs a visible, useful action (not a no-op)', async () => {
-    tokenStore.set('tok');
-    vi.stubGlobal('fetch', mockFetch({ user: CUSTOMER }));
-    const scrollSpy = vi.fn();
-    Element.prototype.scrollIntoView = scrollSpy;
-    renderProfile();
-    await screen.findByText('Custom Terracotta Pot');
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /request a service/i }));
-
-    expect(scrollSpy).toHaveBeenCalled();
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Request' })[0]).toHaveFocus());
-  });
-
-  it('never auto-submits a request — clicking the sticky CTA with multiple services requires the visitor to still pick one', async () => {
-    tokenStore.set('tok');
-    const fetchMock = mockFetch({ user: CUSTOMER });
-    vi.stubGlobal('fetch', fetchMock);
-    Element.prototype.scrollIntoView = vi.fn();
-    renderProfile();
-    await screen.findByText('Custom Terracotta Pot');
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /request a service/i }));
-
-    expect(fetchMock.mock.calls.some(([url, init]) => url.endsWith('/api/orders') && init?.method === 'POST')).toBe(false);
-  });
-
-  it('individual Request button calls the create-order mutation with the right payload', async () => {
+  it('individual Request opens a confirmation dialog with the right details, without submitting', async () => {
     tokenStore.set('tok');
     const fetchMock = mockFetch({ user: CUSTOMER });
     vi.stubGlobal('fetch', fetchMock);
@@ -161,15 +118,55 @@ describe('Profile — service request flow', () => {
     const user = userEvent.setup();
     await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
 
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([url, init]) => url.endsWith('/api/orders') && init?.method === 'POST')).toBe(true);
+    const dialog = await screen.findByRole('dialog', { name: /request this service/i });
+    expect(within(dialog).getByText('Custom Terracotta Pot')).toBeInTheDocument();
+    expect(within(dialog).getByText('Ramesh Kumar')).toBeInTheDocument();
+    expect(within(dialog).getByText('₹250')).toBeInTheDocument();
+    expect(within(dialog).getByText('3 days')).toBeInTheDocument();
+    expect(findOrderPosts(fetchMock)).toHaveLength(0);
+  });
+
+  it('includes an optional note in the create-order payload', async () => {
+    tokenStore.set('tok');
+    const fetchMock = mockFetch({ user: CUSTOMER });
+    vi.stubGlobal('fetch', fetchMock);
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
+    await screen.findByRole('dialog');
+    await user.type(screen.getByLabelText(/note/i), 'Please make it terracotta red.');
+    await user.click(screen.getByRole('button', { name: /send request/i }));
+
+    await waitFor(() => expect(findOrderPosts(fetchMock)).toHaveLength(1));
+    const [, init] = findOrderPosts(fetchMock)[0];
+    expect(JSON.parse(init!.body as string)).toMatchObject({
+      entrepreneurId: 'ramesh',
+      kind: 'service',
+      itemId: 'svc-1',
+      note: 'Please make it terracotta red.',
     });
-    const [, init] = fetchMock.mock.calls.find(([url, i]) => url.endsWith('/api/orders') && i?.method === 'POST')!;
-    expect(JSON.parse(init!.body as string)).toMatchObject({ entrepreneurId: 'ramesh', kind: 'service', itemId: 'svc-1' });
+  });
+
+  it('Send Request calls the mutation exactly once and closes the dialog on success', async () => {
+    tokenStore.set('tok');
+    const fetchMock = mockFetch({ user: CUSTOMER });
+    vi.stubGlobal('fetch', fetchMock);
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /send request/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(findOrderPosts(fetchMock)).toHaveLength(1);
     expect(await screen.findByText(/request sent to ramesh kumar/i)).toBeInTheDocument();
   });
 
-  it('shows "Sending…" and disables the button while pending, preventing a duplicate submission', async () => {
+  it('disables Send Request and shows "Sending…" while pending, preventing a duplicate submission', async () => {
     tokenStore.set('tok');
     let resolveOrder!: () => void;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -192,22 +189,99 @@ describe('Profile — service request flow', () => {
     await screen.findByText('Custom Terracotta Pot');
 
     const user = userEvent.setup();
-    const button = screen.getAllByRole('button', { name: 'Request' })[0];
-    await user.click(button);
+    await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /send request/i }));
 
     const sendingButton = await screen.findByRole('button', { name: 'Sending…' });
     expect(sendingButton).toBeDisabled();
-
-    // A click while disabled must not fire a second POST.
-    await user.click(sendingButton);
+    await user.click(sendingButton); // disabled — must not fire a second POST
     resolveOrder();
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Request' })[0]).not.toBeDisabled());
-    const orderPosts = fetchMock.mock.calls.filter(([url, init]) => url.endsWith('/api/orders') && init?.method === 'POST');
-    expect(orderPosts).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(findOrderPosts(fetchMock)).toHaveLength(1);
   });
 
-  it('redirects an unauthenticated visitor to login instead of silently doing nothing', async () => {
+  it('Cancel closes the dialog without submitting', async () => {
+    tokenStore.set('tok');
+    const fetchMock = mockFetch({ user: CUSTOMER });
+    vi.stubGlobal('fetch', fetchMock);
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(findOrderPosts(fetchMock)).toHaveLength(0);
+  });
+
+  it('Escape closes the dialog without submitting', async () => {
+    tokenStore.set('tok');
+    const fetchMock = mockFetch({ user: CUSTOMER });
+    vi.stubGlobal('fetch', fetchMock);
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(findOrderPosts(fetchMock)).toHaveLength(0);
+  });
+
+  it('sticky CTA with multiple services opens a service chooser first', async () => {
+    tokenStore.set('tok');
+    vi.stubGlobal('fetch', mockFetch({ user: CUSTOMER }));
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /request a service/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /choose a service/i });
+    expect(within(dialog).getByText('Custom Terracotta Pot')).toBeInTheDocument();
+    expect(within(dialog).getByText('Diwali Diya Set')).toBeInTheDocument();
+  });
+
+  it('selecting a service from the chooser then sending uses that service’s id', async () => {
+    tokenStore.set('tok');
+    const fetchMock = mockFetch({ user: CUSTOMER });
+    vi.stubGlobal('fetch', fetchMock);
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /request a service/i }));
+    const chooser = await screen.findByRole('dialog', { name: /choose a service/i });
+    await user.click(within(chooser).getByText('Diwali Diya Set'));
+
+    await screen.findByRole('dialog', { name: /request this service/i });
+    await user.click(screen.getByRole('button', { name: /send request/i }));
+
+    await waitFor(() => expect(findOrderPosts(fetchMock)).toHaveLength(1));
+    const [, init] = findOrderPosts(fetchMock)[0];
+    expect(JSON.parse(init!.body as string)).toMatchObject({ itemId: 'svc-2' });
+  });
+
+  it('preselects the single service and skips the chooser when there is only one', async () => {
+    tokenStore.set('tok');
+    vi.stubGlobal('fetch', mockFetch({ user: CUSTOMER, services: [SERVICES[0]] }));
+    renderProfile();
+    await screen.findByText('Custom Terracotta Pot');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /request a service/i }));
+
+    expect(await screen.findByRole('dialog', { name: /request this service/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /choose a service/i })).not.toBeInTheDocument();
+  });
+
+  it('redirects an unauthenticated visitor to login without opening the dialog', async () => {
     vi.stubGlobal('fetch', mockFetch({ user: null }));
     renderProfile();
     await screen.findByText('Custom Terracotta Pot');
@@ -216,9 +290,10 @@ describe('Profile — service request flow', () => {
     await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
 
     expect(await screen.findByText('Login page')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('shows a clear role error, not a silent no-op, for a non-customer account', async () => {
+  it('shows a role error for a non-customer without opening the dialog', async () => {
     tokenStore.set('tok');
     vi.stubGlobal('fetch', mockFetch({ user: ENTREPRENEUR_USER }));
     renderProfile();
@@ -228,5 +303,16 @@ describe('Profile — service request flow', () => {
     await user.click(screen.getAllByRole('button', { name: 'Request' })[0]);
 
     expect(await screen.findByText('Only customer accounts can place orders.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows no dead CTA when there are no services', async () => {
+    tokenStore.set('tok');
+    vi.stubGlobal('fetch', mockFetch({ user: CUSTOMER, services: [] }));
+    renderProfile();
+
+    const matches = await screen.findAllByText('No services listed yet');
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: /request a service/i })).not.toBeInTheDocument();
   });
 });

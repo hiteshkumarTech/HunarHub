@@ -7,6 +7,7 @@ import { RequireAuth } from './components/RequireAuth';
 // Landing and Browse are the highest-traffic entry points, so they load eagerly
 // (part of the initial bundle). Everything else is code-split — its JS is only
 // fetched when a visitor actually navigates there.
+const Marketplace = lazy(() => import('./pages/Marketplace'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
@@ -30,6 +31,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/browse" element={<Browse />} />
+          <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/profile/:id" element={<Profile />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

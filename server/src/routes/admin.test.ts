@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../app';
 import { connectTestDB, closeTestDB, clearTestDB } from '../test/db';
 import { createUser, authHeader } from '../test/fixtures';
+import { Category } from '../models/Category';
 
 const app = createApp();
 
@@ -117,5 +118,76 @@ describe('PATCH /api/admin/entrepreneurs/:id/verify', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.entrepreneur.verified).toBe(true);
+  });
+});
+
+describe('GET /api/admin/orders — monitoring', () => {
+  it('rejects a non-admin', async () => {
+    const { token } = await createUser({ email: 'priya@test.local', role: 'customer' });
+    const res = await request(app).get('/api/admin/orders').set(authHeader(token));
+    expect(res.status).toBe(403);
+  });
+
+  it('lists orders across every customer/seller pair with both names attached', async () => {
+    const seller = await createUser({ email: 'ramesh@test.local', role: 'entrepreneur' });
+    const customer = await createUser({ email: 'priya@test.local', role: 'customer' });
+    const service = await request(app).post('/api/services').set(authHeader(seller.token)).send({ name: 'Custom Pot', price: 250 });
+    await request(app)
+      .post('/api/orders')
+      .set(authHeader(customer.token))
+      .send({ entrepreneurId: seller.user._id.toString(), kind: 'service', itemId: service.body.service.id });
+
+    const admin = await createUser({ email: 'admin@test.local', role: 'admin' });
+    const res = await request(app).get('/api/admin/orders').set(authHeader(admin.token));
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.orders[0].customer.name).toBe('Test User');
+    expect(res.body.orders[0].entrepreneur.name).toBe('Test User');
+    expect(res.body.orders[0].status).toBe('pending');
+  });
+
+  it('filters by status', async () => {
+    const seller = await createUser({ email: 'ramesh@test.local', role: 'entrepreneur' });
+    const customer = await createUser({ email: 'priya@test.local', role: 'customer' });
+    const service = await request(app).post('/api/services').set(authHeader(seller.token)).send({ name: 'Custom Pot', price: 250 });
+    await request(app)
+      .post('/api/orders')
+      .set(authHeader(customer.token))
+      .send({ entrepreneurId: seller.user._id.toString(), kind: 'service', itemId: service.body.service.id });
+
+    const admin = await createUser({ email: 'admin@test.local', role: 'admin' });
+    const res = await request(app).get('/api/admin/orders?status=completed').set(authHeader(admin.token));
+    expect(res.body.total).toBe(0); // the seeded order is still 'pending'
+  });
+});
+
+describe('category management', () => {
+  it('rejects a non-admin trying to edit a category', async () => {
+    await Category.create({ id: 'potter', label: 'Potter', active: true });
+    const { token } = await createUser({ email: 'ramesh@test.local', role: 'entrepreneur' });
+    const res = await request(app).patch('/api/admin/categories/potter').set(authHeader(token)).send({ active: false });
+    expect(res.status).toBe(403);
+  });
+
+  it('lets admin rename a category and toggle it inactive, reflected on the public list', async () => {
+    await Category.create({ id: 'potter', label: 'Potter', active: true });
+    const admin = await createUser({ email: 'admin@test.local', role: 'admin' });
+
+    const update = await request(app)
+      .patch('/api/admin/categories/potter')
+      .set(authHeader(admin.token))
+      .send({ label: 'Potter (Kumhar)', active: false });
+    expect(update.status).toBe(200);
+    expect(update.body.category).toEqual({ id: 'potter', label: 'Potter (Kumhar)', active: false });
+
+    const publicList = await request(app).get('/api/categories');
+    expect(publicList.body.categories).toEqual([{ id: 'potter', label: 'Potter (Kumhar)', active: false }]);
+  });
+
+  it('404s for a category id that was never seeded', async () => {
+    const admin = await createUser({ email: 'admin@test.local', role: 'admin' });
+    const res = await request(app).patch('/api/admin/categories/tailor').set(authHeader(admin.token)).send({ active: false });
+    expect(res.status).toBe(404);
   });
 });

@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
 
-const imageSchema = new Schema({ url: { type: String, required: true }, publicId: { type: String, required: true } }, { _id: false });
+// publicId is nullable, not required — see Product.ts for why.
+const imageSchema = new Schema({ url: { type: String, required: true }, publicId: { type: String, default: null } }, { _id: false });
 
 // Services get a single photo slot, not a gallery — modelled as a 0-or-1
 // array (same shape as Product.images) purely so both routes can share one

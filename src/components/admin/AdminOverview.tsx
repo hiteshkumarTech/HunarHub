@@ -1,4 +1,4 @@
-import { Users, UserCog, Store, ShieldCheck, Package, CheckCircle2, Clock, Wallet, Star } from 'lucide-react';
+import { Users, UserCog, Store, ShieldCheck, Package, CheckCircle2, Clock, Wallet, Star, Flag } from 'lucide-react';
 import { Kpi } from '../ui/Kpi';
 import { Skeleton, ErrorState } from '../ui/States';
 import { useAdminStats } from '../../hooks/admin';
@@ -56,6 +56,7 @@ export function AdminOverview() {
         <Kpi icon={<Clock size={16} />} label="Pending" value={s.pendingOrders} />
         <Kpi icon={<CheckCircle2 size={16} />} label="Completed" value={s.completedOrders} />
         <Kpi icon={<Star size={16} />} label="Reviews" value={s.reviews} />
+        <Kpi icon={<Flag size={16} />} label="Open complaints" value={s.openComplaints} hint="Not yet resolved" />
       </Section>
     </div>
   );

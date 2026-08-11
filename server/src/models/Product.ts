@@ -1,6 +1,10 @@
 import { Schema, model } from 'mongoose';
 
-const imageSchema = new Schema({ url: { type: String, required: true }, publicId: { type: String, required: true } }, { _id: false });
+// publicId is nullable, not required: seeded/placeholder images (Picsum URLs,
+// pre-Cloudinary data) legitimately have no Cloudinary asset to reference —
+// see serialize.ts's imagesJson and the seed script. Only real Cloudinary
+// uploads populate a real publicId.
+const imageSchema = new Schema({ url: { type: String, required: true }, publicId: { type: String, default: null } }, { _id: false });
 
 // Products support a small gallery — up to 4 images, first = cover (enforced
 // in the route layer, not here, since Mongoose array validators fire on every

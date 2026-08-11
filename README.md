@@ -103,30 +103,38 @@ src/
 ├─ index.css                # Tailwind 4 theme — fonts, color tokens, dark-mode variables, focus-visible
 ├─ types.ts, types/api.ts   # shared TypeScript types (frontend shapes; mirror the API's serializers)
 ├─ lib/                     # api.ts (fetch client), queryClient.ts, utils.ts, recentlyViewed.ts
-├─ hooks/                   # entrepreneurs, orders, favorites, reviews, listings, admin — one module each
+├─ hooks/                   # entrepreneurs, orders, favorites, reviews, listings, admin, marketplace,
+│                            # categories, complaints (M10) — one module each
 ├─ context/                 # AuthContext, ThemeContext
-├─ data/mockData.ts         # seed/fallback data (landing page graceful-degrades to this if the API is cold)
+├─ data/mockData.ts         # landing-page fallback data only — CATEGORIES here is a marketing-page constant;
+│                            # Register/Browse/Marketplace read the live list from GET /api/categories (M10)
 ├─ components/
 │  ├─ ui/                   # Button, Card, Badge, Avatar, Tabs, StatusBadge, Toast, States, Field, Kpi,
 │  │                         # ConfirmAction, ImageUploadField, ThemeToggle
 │  ├─ landing/               # HeroSection, FeaturedEntrepreneurs, TrendingProducts, Testimonials, …
-│  ├─ admin/                 # AdminOverview, AdminUsersPanel, AdminListingsPanel (used by /admin)
+│  ├─ admin/                 # AdminOverview, AdminUsersPanel, AdminListingsPanel, AdminOrdersPanel,
+│  │                         # AdminComplaintsPanel, AdminCategoriesPanel (last three are M10)
 │  ├─ dashboard/             # ListingsManager — entrepreneur's own create/edit/delete UI
-│  └─ auth/AuthShell.tsx     # shared Login/Register shell
-└─ pages/                   # Landing, Browse, Profile, Dashboard, Login, Register, Favourites, MyOrders,
-                             # AdminDashboard
+│  ├─ auth/AuthShell.tsx     # shared Login/Register shell
+│  ├─ MarketplaceListingCard.tsx  # M10 — a single service/product card with its seller attached
+│  └─ ComplaintForm.tsx      # M10 — inline "report an issue" form, shared by MyOrders + Dashboard
+└─ pages/                   # Landing, Browse, Marketplace (M10), Profile, Dashboard, Login, Register,
+                             # Favourites, MyOrders, AdminDashboard
 
 server/
 ├─ src/
 │  ├─ app.ts, index.ts       # Express app wiring, entry point
 │  ├─ config/                # db.ts (Mongoose connect), env.ts (fail-fast env validation), cloudinary.ts
 │  ├─ middleware/            # auth (JWT), rateLimit, sanitize (mongo-sanitize), validate (Zod), upload (Multer), error
-│  ├─ models/                # User (embeds entrepreneur profile), Order, Review, Service, Product, Favorite
-│  ├─ routes/                # auth, entrepreneurs, services, products, orders, reviews, favorites, admin
+│  ├─ models/                # User (embeds entrepreneur profile), Order, Review, Service, Product, Favorite,
+│  │                         # Category, Complaint (last two are M10)
+│  ├─ routes/                # auth, entrepreneurs, services, products, orders, reviews, favorites, admin,
+│  │                         # listings, categories, complaints (last three are M10)
 │  ├─ utils/                 # ApiError, asyncHandler, serialize (Mongoose doc → API JSON), token, imageGallery
 │  ├─ test/                  # db.ts (in-memory MongoDB harness), fixtures.ts (seed users + tokens)
 │  ├─ seed/seed.ts           # demo data incl. the customer/entrepreneur accounts above (admin gets its
-│  │                         # own generated password — never the public demo one, see DEPLOY-CHECKLIST.md)
+│  │                         # own generated password — never the public demo one, see DEPLOY-CHECKLIST.md);
+│  │                         # M10 added categories, mixed-status orders, and a demo complaint
 │  └─ scripts/setAdminPassword.ts  # rotate the admin password on an already-seeded DB without wiping it
 └─ render.yaml               # Render Blueprint (see Deployment)
 ```
@@ -138,13 +146,14 @@ server/
 | Path | Access | Page |
 |---|---|---|
 | `/` | Public | Landing — hero, popular categories, featured entrepreneurs (live, top-rated), trending products |
-| `/browse` | Public | Marketplace — category/search/price/verified/available filters, sort, infinite pagination |
+| `/browse` | Public | Browse Talent — discover *sellers*: category/search/price/verified/available filters, sort, infinite pagination |
+| `/marketplace` | Public | Marketplace (M10) — discover *listings* directly: services + products merged, filter by category/location/price/search, no need to open a seller's profile first |
 | `/profile/:id` | Public | Entrepreneur profile — services/products/reviews tabs, request/buy, favourite |
-| `/login`, `/register` | Public | Auth — register collects craft/location for the entrepreneur role |
-| `/dashboard` | Entrepreneur | KPIs, incoming requests (accept/decline/complete), availability toggle, manage own listings |
-| `/orders` | Customer | Order history, status timeline, leave a review after completion |
+| `/login`, `/register` | Public | Auth — register collects craft/location for the entrepreneur role; category picker reads live from `GET /api/categories` |
+| `/dashboard` | Entrepreneur | KPIs (incl. completed-orders count), incoming requests (accept/decline/complete), availability toggle, report an issue, manage own listings |
+| `/orders` | Customer | Order history, status timeline, leave a review after completion, report an issue |
 | `/favourites` | Customer | Saved entrepreneurs |
-| `/admin` | Admin | Platform metrics, user directory (search/filter, verify entrepreneurs), cross-seller listing moderation |
+| `/admin` | Admin | Platform metrics, user directory, cross-seller listing moderation, order monitoring, complaint management, category management (M10 added the last three tabs) |
 
 ### API (`server`, mounted under `/api`)
 
@@ -152,10 +161,12 @@ server/
 |---|---|---|
 | `POST /auth/register`, `POST /auth/login` | — | Create account / sign in → `{ user, token }` |
 | `GET /auth/me` | Bearer | Restore session |
-| `GET /entrepreneurs` | — | List, filtered/sorted/paginated (`cat`, `q`, `maxPrice`, `sort`, `verified`, `available`, `page`, `limit`) |
+| `GET /entrepreneurs` | — | List, filtered/sorted/paginated (`cat`, `q`, `city`, `state`, `maxPrice`, `sort`, `verified`, `available`, `page`, `limit`) |
 | `GET /entrepreneurs/:id` | — | Profile + services + products + reviews |
 | `PATCH /entrepreneurs/me` | Entrepreneur | Update own profile / availability |
 | `POST/PATCH/DELETE /services`, `/products` | Entrepreneur | Manage listings — JSON or `multipart/form-data` with image file(s); products get a 4-image gallery (first = cover), services get 1 photo |
+| `GET /listings` *(M10)* | — | Marketplace discovery — services + products merged across every seller (`kind`, `cat`, `city`, `state`, `minPrice`/`maxPrice`, `q`, `page`, `limit`) |
+| `GET /categories` *(M10)* | — | The 5 craft categories' current label/active state |
 | `POST /orders` | Customer | Place a service request / product order |
 | `GET /orders/mine` | Customer | Own order history |
 | `GET /orders/incoming` | Entrepreneur | Requests received |
@@ -163,11 +174,16 @@ server/
 | `POST /reviews` | Customer | Earned review — requires a completed order with that entrepreneur |
 | `GET /reviews/entrepreneur/:id` | — | Public review list |
 | `GET/POST /favorites`, `DELETE /favorites/:id` | Customer | Wishlist |
+| `POST /complaints` *(M10)* | Bearer | Report an issue, optionally tied to one of the caller's own orders (403 if not a party to it) |
+| `GET /complaints/mine` *(M10)* | Bearer | The caller's own reported complaints |
 | `GET /admin/entrepreneurs`, `PATCH /admin/entrepreneurs/:id/verify` | Admin | Entrepreneur list + verification |
 | `GET /admin/users` | Admin | Every account, any role (`role`, `q`, `page` filters) |
 | `GET /admin/listings` | Admin | Services + products across every seller (`kind`, `q`, `page` filters) |
 | `DELETE /admin/services/:id`, `DELETE /admin/products/:id` | Admin | Moderation removal — no ownership check |
-| `GET /admin/stats` | Admin | Platform counts — users, listings, orders (all real queries, no fabricated numbers) |
+| `GET /admin/orders` *(M10)* | Admin | Read-only order/request monitoring (`status`, `kind`, `q`, `page` filters); no status-override endpoint by design |
+| `GET/PATCH /admin/categories/:id` *(M10)* | Admin | Rename a category's label / toggle it active-inactive (fixed 5, no add) |
+| `GET /admin/complaints`, `PATCH /admin/complaints/:id` *(M10)* | Admin | List/filter by status, resolve/annotate any complaint |
+| `GET /admin/stats` | Admin | Platform counts — users, listings, orders, open complaints (all real queries, no fabricated numbers) |
 | `GET /health` | — | Liveness check (used by Render) |
 
 ## Testing
@@ -177,21 +193,32 @@ npm test               # frontend — Vitest + Testing Library
 cd server && npm test  # backend — Vitest + Supertest + mongodb-memory-server (in-memory, never a real DB)
 ```
 
-Frontend coverage (19 tests): `lib/api.test.ts` (fetch client / error normalisation, FormData vs JSON bodies),
+Frontend coverage (30 tests): `lib/api.test.ts` (fetch client / error normalisation, FormData vs JSON bodies),
 `lib/recentlyViewed.test.ts`, `pages/Landing.test.tsx` (smoke test — every marketing section renders),
 `components/ui/StatusBadge.test.tsx`, `components/ui/Tabs.test.tsx` (ARIA roles + keyboard nav),
 `components/ui/ImageUploadField.test.tsx` (renders, preview on select, existing-image alt text, validation error,
-max-count enforcement).
+max-count enforcement). **M10 additions (11 tests)**: `hooks/marketplace.test.tsx` (correct `GET /api/listings`
+query params per filter, `all` omitted rather than sent literally, pagination via `fetchNextPage`),
+`components/ComplaintForm.test.tsx` (submit disabled until both fields are filled, correct payload incl.
+`orderId`, error surfaces without closing the form), `components/admin/AdminComplaintsPanel.test.tsx` (renders
+from the admin endpoint, status-select triggers the update mutation, status-tab click refetches filtered,
+empty state), `pages/Dashboard.test.tsx` (earnings sum + completed-order count both correct against a
+mixed-status order set — declined/accepted/pending amounts verified excluded, not just "a number renders").
 
-Backend coverage (55 tests, `server/src/routes/*.test.ts`) prioritises the highest-risk behavior over line
+Backend coverage (82 tests, `server/src/routes/*.test.ts`) prioritises the highest-risk behavior over line
 coverage: auth (register/login/session, can't self-register as admin), role authorization (customer/entrepreneur
 rejected from admin routes), listing ownership (an entrepreneur can edit/delete their own service or product but
 gets a 403 touching another seller's — verified against the DB state, not just the response code), the order
 lifecycle and cross-seller isolation, the earned-review rule, the admin routes (stats reflect real counts, not
 fabricated numbers; moderation delete; role/search filters), and image uploads (ownership on upload/replace/
 remove, MIME/size validation, the 4-image gallery cap, Cloudinary cleanup on delete — Cloudinary is fully mocked,
-never called for real). Each suite boots its own in-memory MongoDB instance via `mongodb-memory-server` —
-nothing here ever touches a real database, local or production.
+never called for real). **M10 additions (12 tests)**: `marketplace.test.ts` (listings filter correctly by
+category/location/price/kind/name search, a zero-match seller filter returns an empty result not an error,
+entrepreneurs city filter, availability-toggle authorization), `complaints.test.ts` (create/ownership-check
+against the referenced order/authentication/scoping to `/mine`/admin list+filter+update/non-admin blocked),
+`admin.test.ts` additions (order monitoring incl. status filter, category rename+toggle reflected on the public
+endpoint, non-admin blocked from both). Each suite boots its own in-memory MongoDB instance via
+`mongodb-memory-server` — nothing here ever touches a real database, local or production.
 
 **CI** (`.github/workflows/ci.yml`) runs both suites — plus typecheck and the production build — on every pull
 request and every push to `main`. No secrets required: the frontend build needs none, and the backend's
@@ -223,11 +250,22 @@ provisioning is now separate from the public demo accounts. That fix is in the c
 password change alone doesn't invalidate a token issued before rotation); full runbook in
 `DEPLOY-CHECKLIST.md`.
 
-Most recently, **real image uploads + a product gallery** (M9): sellers upload actual photos (Cloudinary, via
+After that, **real image uploads + a product gallery** (M9): sellers upload actual photos (Cloudinary, via
 the backend — never a raw URL paste) for their services (1 photo) and products (up to 4, first = cover),
 with a preview/remove/replace UI in the existing listing manager, ownership enforced server-side the same way
 every other listing mutation already was, and old seeded/placeholder listings still rendering unchanged
 (nothing required a destructive migration). Customers see the real photos on Browse → profile → Products/
 Services, with a lightbox gallery for multi-image products; admin sees a thumbnail per listing row.
+
+Most recently, an **internship-requirement gap sweep** (M10): a full requirement-by-requirement audit against
+the original brief, followed by targeted fixes for the real gaps it found — a genuine **product/service
+marketplace** (`/marketplace`, distinct from `/browse`'s seller discovery), **real location filtering**
+(exact city/state match, not just fuzzy search), an **admin order-monitoring** view, **admin category
+management** (rename/deactivate the 5 fixed categories), and a **complaints/disputes** flow (customer/
+entrepreneur report → admin resolve). Entrepreneur availability and the earnings overview were both found
+already fully implemented and just needed a small completeness pass (a KPI + tests) rather than new work. Every
+original functional requirement is now explicitly classified DONE / INTENTIONALLY SIMPLIFIED / OUT OF SCOPE in
+[ROADMAP.md](./ROADMAP.md#requirement-traceability-matrix-m10)'s traceability matrix — nothing was left as an
+unexplained gap. 82 backend / 30 frontend tests, zero regressions.
 
 Remaining work — payments, messaging, observability, i18n — is tracked in [ROADMAP.md](./ROADMAP.md).

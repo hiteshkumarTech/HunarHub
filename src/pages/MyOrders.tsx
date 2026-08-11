@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Star } from 'lucide-react';
+import { Package, Star, Flag } from 'lucide-react';
 import { PageBar } from '../components/PageBar';
 import { Monogram } from '../components/Monogram';
+import { ComplaintForm } from '../components/ComplaintForm';
 import { Skeleton, EmptyState, ErrorState } from '../components/ui/States';
 import { StatusBadge, OrderTimeline } from '../components/ui/StatusBadge';
 import { buttonStyles } from '../components/ui/button';
@@ -77,6 +78,7 @@ export default function MyOrders() {
   const { data, isLoading, isError, refetch } = useMyOrders();
   const [filter, setFilter] = useState<'all' | OrderStatus>('all');
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   const orders = data?.orders ?? [];
   const list = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
@@ -168,6 +170,17 @@ export default function MyOrders() {
                         <Star size={14} /> Leave a review
                       </button>
                     )
+                  )}
+
+                  {reporting === o.id ? (
+                    <ComplaintForm orderId={o.id} onDone={() => setReporting(null)} />
+                  ) : (
+                    <button
+                      onClick={() => setReporting(o.id)}
+                      className={buttonStyles({ variant: 'ghost', size: 'sm', className: 'mt-3 text-gray-500' })}
+                    >
+                      <Flag size={14} /> Report an issue
+                    </button>
                   )}
                 </div>
               );

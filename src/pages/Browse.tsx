@@ -7,9 +7,9 @@ import { CardGridSkeleton, EmptyState, ErrorState } from '../components/ui/State
 import { CatIcon } from '../components/craftIcons';
 import { buttonStyles } from '../components/ui/button';
 import { useBrowseEntrepreneurs } from '../hooks/entrepreneurs';
+import { useCategories } from '../hooks/categories';
 import { useDebounced } from '../hooks/useDebounced';
 import { getRecentlyViewed } from '../lib/recentlyViewed';
-import { CATEGORIES } from '../data/mockData';
 import { cn, inr } from '../lib/utils';
 import type { CategoryId } from '../types';
 
@@ -24,6 +24,8 @@ export default function Browse() {
   const [verified, setVerified] = useState(false);
   const [available, setAvailable] = useState(false);
   const recent = getRecentlyViewed();
+  const categories = useCategories();
+  const activeCategories = categories.data?.categories.filter((c) => c.active) ?? [];
 
   const query = useBrowseEntrepreneurs({ cat, q: debouncedQ, maxPrice, sort, verified, available });
   const list = query.data?.pages.flatMap((p) => p.entrepreneurs) ?? [];
@@ -71,7 +73,7 @@ export default function Browse() {
 
         <div className="mt-8 flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
-            {[{ id: 'all', name: 'All' }, ...CATEGORIES].map((c) => (
+            {[{ id: 'all', label: 'All' }, ...activeCategories].map((c) => (
               <button
                 key={c.id}
                 onClick={() => setCat(c.id)}
@@ -81,7 +83,7 @@ export default function Browse() {
                 )}
               >
                 {c.id !== 'all' && <CatIcon id={c.id as CategoryId} size={13} strokeWidth={2} />}
-                {c.name}
+                {c.label}
               </button>
             ))}
           </div>

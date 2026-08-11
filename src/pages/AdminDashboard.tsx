@@ -4,11 +4,17 @@ import { Tabs, TabPanel } from '../components/ui/Tabs';
 import { AdminOverview } from '../components/admin/AdminOverview';
 import { AdminUsersPanel } from '../components/admin/AdminUsersPanel';
 import { AdminListingsPanel } from '../components/admin/AdminListingsPanel';
+import { AdminOrdersPanel } from '../components/admin/AdminOrdersPanel';
+import { AdminComplaintsPanel } from '../components/admin/AdminComplaintsPanel';
+import { AdminCategoriesPanel } from '../components/admin/AdminCategoriesPanel';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'users', label: 'Users' },
   { id: 'listings', label: 'Listings' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'complaints', label: 'Complaints' },
+  { id: 'categories', label: 'Categories' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -36,6 +42,15 @@ export default function AdminDashboard() {
           </TabPanel>
           <TabPanel id="listings" activeId={tab} idPrefix="admin">
             <AdminListingsPanel />
+          </TabPanel>
+          <TabPanel id="orders" activeId={tab} idPrefix="admin">
+            <AdminOrdersPanel />
+          </TabPanel>
+          <TabPanel id="complaints" activeId={tab} idPrefix="admin">
+            <AdminComplaintsPanel />
+          </TabPanel>
+          <TabPanel id="categories" activeId={tab} idPrefix="admin">
+            <AdminCategoriesPanel />
           </TabPanel>
         </div>
       </main>

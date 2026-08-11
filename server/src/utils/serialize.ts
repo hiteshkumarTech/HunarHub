@@ -104,3 +104,66 @@ export function adminListingJson(item: any, kind: 'service' | 'product') {
     createdAt: item.createdAt,
   };
 }
+
+/** Admin-only: an order/request with both parties attached, for read-only monitoring. */
+export function adminOrderJson(o: any) {
+  return {
+    id: o._id.toString(),
+    kind: o.kind,
+    title: o.title,
+    price: o.price,
+    status: o.status,
+    customer: o.customer && o.customer.name ? { id: o.customer._id.toString(), name: o.customer.name } : { id: o.customer?.toString(), name: 'Unknown' },
+    entrepreneur:
+      o.entrepreneur && o.entrepreneur.name
+        ? { id: o.entrepreneur._id.toString(), name: o.entrepreneur.name }
+        : { id: o.entrepreneur?.toString(), name: 'Unknown' },
+    createdAt: o.createdAt,
+  };
+}
+
+/** Public marketplace card — a service or product plus enough about its
+ *  seller (category, location, rating, verified, available) to filter/display
+ *  without a second request. */
+export function marketplaceListingJson(item: any, kind: 'service' | 'product') {
+  const ent = item.entrepreneur ?? {};
+  const p = ent.profile ?? {};
+  const images = kind === 'product' && !item.images?.length && item.image ? [{ url: item.image, publicId: null }] : imagesJson(item.images);
+  return {
+    id: item._id.toString(),
+    kind,
+    name: item.name,
+    price: item.price,
+    dur: kind === 'service' ? item.dur ?? '' : undefined,
+    images,
+    entrepreneur: {
+      id: ent._id ? ent._id.toString() : ent.toString?.() ?? '',
+      name: ent.name ?? 'Unknown',
+      category: p.category ?? null,
+      craft: p.craft ?? '',
+      city: p.city ?? '',
+      state: p.state ?? '',
+      rating: p.ratingAvg ?? 0,
+      verified: p.verified ?? false,
+      available: p.available ?? true,
+    },
+    createdAt: item.createdAt,
+  };
+}
+
+export function categoryJson(c: any) {
+  return { id: c.id, label: c.label, active: c.active };
+}
+
+export function complaintJson(c: any) {
+  return {
+    id: c._id.toString(),
+    reporter: c.reporter && c.reporter.name ? { id: c.reporter._id.toString(), name: c.reporter.name } : { id: c.reporter?.toString(), name: 'Unknown' },
+    order: c.order ? c.order.toString() : null,
+    subject: c.subject,
+    message: c.message,
+    status: c.status,
+    adminNote: c.adminNote ?? '',
+    createdAt: c.createdAt,
+  };
+}

@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../lib/api';
 import { AuthShell } from '../components/auth/AuthShell';
 import { Field, TextInput, SelectInput } from '../components/ui/Field';
 import { buttonStyles } from '../components/ui/button';
-import { CATEGORIES } from '../data/mockData';
+import { useCategories } from '../hooks/categories';
 import { cn } from '../lib/utils';
 import type { CategoryId } from '../types';
 import type { RegisterInput } from '../types/api';
@@ -14,9 +14,23 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState<'customer' | 'entrepreneur'>('customer');
-  const [form, setForm] = useState({ name: '', email: '', password: '', category: 'potter', craft: '', city: '', state: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', category: '', craft: '', city: '', state: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Category picker reads from the admin-managed list (GET /api/categories)
+  // instead of a compiled-in constant, so a renamed/deactivated category
+  // takes effect without a redeploy — see hooks/categories.ts.
+  const categories = useCategories();
+  const activeCategories = categories.data?.categories.filter((c) => c.active) ?? [];
+
+  useEffect(() => {
+    if (activeCategories.length && !activeCategories.some((c) => c.id === form.category)) {
+      setForm((f) => ({ ...f, category: activeCategories[0].id }));
+    }
+    // Only re-sync when the loaded category list changes, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories.data]);
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -93,13 +107,32 @@ export default function Register() {
         {role === 'entrepreneur' && (
           <>
             <Field label="Craft category" htmlFor="category">
-              <SelectInput id="category" value={form.category} onChange={(e) => set('category', e.target.value)}>
-                {CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </SelectInput>
+              {categories.isError ? (
+                <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-700">
+                  Could not load categories.
+                  <button type="button" onClick={() => categories.refetch()} className="font-medium underline">
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <SelectInput
+                  id="category"
+                  required
+                  disabled={activeCategories.length === 0}
+                  value={form.category}
+                  onChange={(e) => set('category', e.target.value)}
+                >
+                  {activeCategories.length === 0 ? (
+                    <option value="">Loading…</option>
+                  ) : (
+                    activeCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))
+                  )}
+                </SelectInput>
+              )}
             </Field>
             <Field label="Your craft / title" htmlFor="craft">
               <TextInput id="craft" required value={form.craft} onChange={(e) => set('craft', e.target.value)} placeholder="e.g. Potter (Kumhar)" />
@@ -115,7 +148,11 @@ export default function Register() {
           </>
         )}
 
-        <button type="submit" disabled={busy} className={buttonStyles({ size: 'lg', className: 'w-full' })}>
+        <button
+          type="submit"
+          disabled={busy || (role === 'entrepreneur' && !form.category)}
+          className={buttonStyles({ size: 'lg', className: 'w-full' })}
+        >
           {busy ? 'Creating account…' : 'Create account'}
         </button>
       </form>

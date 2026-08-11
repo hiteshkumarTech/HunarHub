@@ -21,6 +21,16 @@ import { Service } from '../models/Service';
 import { Product } from '../models/Product';
 import { Review } from '../models/Review';
 import { Order } from '../models/Order';
+import { Category } from '../models/Category';
+import { Complaint } from '../models/Complaint';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  cobbler: 'Cobbler',
+  potter: 'Potter (Kumhar)',
+  tailor: 'Tailor',
+  artisan: 'Artisan',
+  vendor: 'Vendor',
+};
 
 const pic = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${encodeURIComponent(seed)}/${w}/${h}?grayscale`;
@@ -78,7 +88,11 @@ async function run() {
     Product.deleteMany({}),
     Review.deleteMany({}),
     Order.deleteMany({}),
+    Category.deleteMany({}),
+    Complaint.deleteMany({}),
   ]);
+
+  await Category.insertMany(Object.entries(CATEGORY_LABELS).map(([id, label]) => ({ id, label, active: true })));
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
@@ -89,7 +103,11 @@ async function run() {
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
   await User.create({ name: 'Platform Admin', email: 'admin@hunarhub.in', passwordHash: adminPasswordHash, role: 'admin' });
-  await User.create({ name: 'Priya Sharma', email: 'priya@example.com', passwordHash, role: 'customer' });
+  const priya = await User.create({ name: 'Priya Sharma', email: 'priya@example.com', passwordHash, role: 'customer' });
+
+  // Keep track of a couple of real created listings so the order/earnings/
+  // admin-monitoring demo data below references genuine ids, not fabricated ones.
+  const entrepreneursById: Record<string, { userId: (typeof priya)['_id']; firstServiceId?: unknown; firstProductId?: unknown }> = {};
 
   for (const e of ENTREPRENEURS) {
     const user = await User.create({
@@ -114,14 +132,14 @@ async function run() {
     // publicId: null on these — they're Picsum placeholder URLs, not real
     // Cloudinary assets, so there's nothing to delete if they're ever
     // replaced. Same convention the API uses for any pre-Cloudinary image.
-    await Service.insertMany(
+    const createdServices = await Service.insertMany(
       e.services.map((s, i) => ({
         ...s,
         entrepreneur: user._id,
         images: i === 0 ? [{ url: pic(`svc-${e.id}-${i}`, 500, 400), publicId: null }] : [],
       })),
     );
-    await Product.insertMany(
+    const createdProducts = await Product.insertMany(
       e.products.map((p, i) => ({
         ...p,
         entrepreneur: user._id,
@@ -131,9 +149,34 @@ async function run() {
         ],
       })),
     );
+    entrepreneursById[e.id] = { userId: user._id, firstServiceId: createdServices[0]?._id, firstProductId: createdProducts[0]?._id };
   }
 
-  console.log(`✓ Seeded 1 admin, 1 customer, ${ENTREPRENEURS.length} entrepreneurs (with services + products)`);
+  // A handful of orders across a few statuses — gives the entrepreneur
+  // earnings KPI, the admin order-monitoring tab, and the complaint below
+  // something real to show immediately, without needing anyone to place a
+  // fresh order by hand first.
+  const ramesh = entrepreneursById.ramesh;
+  const sunita = entrepreneursById.sunita;
+  const seededOrders = await Order.insertMany([
+    { customer: priya._id, entrepreneur: ramesh.userId, kind: 'service', item: ramesh.firstServiceId, title: 'Custom Terracotta Pot', price: 250, status: 'completed' },
+    { customer: priya._id, entrepreneur: ramesh.userId, kind: 'product', item: ramesh.firstProductId, title: 'Painted Planter', price: 320, status: 'completed' },
+    { customer: priya._id, entrepreneur: ramesh.userId, kind: 'service', item: ramesh.firstServiceId, title: 'Custom Terracotta Pot', price: 250, status: 'accepted' },
+    { customer: priya._id, entrepreneur: ramesh.userId, kind: 'service', item: ramesh.firstServiceId, title: 'Custom Terracotta Pot', price: 250, status: 'pending' },
+    { customer: priya._id, entrepreneur: sunita.userId, kind: 'service', item: sunita.firstServiceId, title: 'Blouse Stitching', price: 300, status: 'declined' },
+  ]);
+
+  // One demo complaint tied to a real order, so the admin Complaints tab and
+  // a customer's own "my reports" view both have something to show.
+  await Complaint.create({
+    reporter: priya._id,
+    order: seededOrders[1]._id,
+    subject: 'Planter arrived with a small crack',
+    message: 'The painted planter I ordered arrived with a hairline crack near the base. Could you advise on a replacement or refund?',
+    status: 'open',
+  });
+
+  console.log(`✓ Seeded 1 admin, 1 customer, ${ENTREPRENEURS.length} entrepreneurs (with services + products), 5 orders, 1 complaint, 5 categories`);
   console.log('  Customer/entrepreneur demo logins (password: password123):');
   console.log('    priya@example.com  ·  ramesh@hunarhub.in …');
   console.log('');

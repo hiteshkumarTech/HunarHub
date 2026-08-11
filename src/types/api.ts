@@ -184,4 +184,94 @@ export interface AdminStats {
   reviews: number;
   totalListings: number;
   activeListings: number;
+  openComplaints: number;
+}
+
+/** Admin-manageable display metadata for the 5 fixed craft categories — see
+ *  ROADMAP.md for why the category set itself stays a fixed enum. */
+export interface CategoryItem {
+  id: CategoryId;
+  label: string;
+  active: boolean;
+}
+
+export interface CategoriesResponse {
+  categories: CategoryItem[];
+}
+
+/** Enough about a listing's seller to filter/display a marketplace card
+ *  without a second request. */
+export interface MarketplaceEntrepreneurRef {
+  id: string;
+  name: string;
+  category: CategoryId | null;
+  craft: string;
+  city: string;
+  state: string;
+  rating: number;
+  verified: boolean;
+  available: boolean;
+}
+
+/** A single service or product from GET /api/listings — the customer-facing
+ *  product/service marketplace, distinct from Browse (which discovers sellers). */
+export interface MarketplaceListing {
+  id: string;
+  kind: 'service' | 'product';
+  name: string;
+  price: number;
+  dur?: string;
+  images: ListingImage[];
+  entrepreneur: MarketplaceEntrepreneurRef;
+  createdAt: string;
+}
+
+export interface MarketplaceListingsResponse {
+  listings: MarketplaceListing[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export type ComplaintStatus = 'open' | 'in_review' | 'resolved';
+
+export interface ComplaintItem {
+  id: string;
+  reporter: PersonRef;
+  order: string | null;
+  subject: string;
+  message: string;
+  status: ComplaintStatus;
+  adminNote: string;
+  createdAt: string;
+}
+
+export interface ComplaintsResponse {
+  complaints: ComplaintItem[];
+}
+
+/** Admin-only: any order/request with both parties attached, read-only. */
+export interface AdminOrderItem {
+  id: string;
+  kind: 'service' | 'product';
+  title: string;
+  price: number;
+  status: OrderStatus;
+  customer: PersonRef;
+  entrepreneur: PersonRef;
+  createdAt: string;
+}
+
+export interface AdminOrdersResponse {
+  orders: AdminOrderItem[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export interface AdminComplaintsResponse {
+  complaints: ComplaintItem[];
+  total: number;
+  page: number;
+  pages: number;
 }

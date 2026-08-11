@@ -8,7 +8,7 @@ import { UserMenu } from './UserMenu';
 const NAV = [
   { label: 'Discover', to: '/' },
   { label: 'Artisans', to: '/browse' },
-  { label: 'Products', to: '/browse' },
+  { label: 'Products', to: '/marketplace' },
   { label: 'Sell', to: '/register' },
   { label: 'About', to: '/' },
 ];

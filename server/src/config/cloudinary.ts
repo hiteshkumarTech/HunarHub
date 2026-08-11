@@ -17,7 +17,13 @@ if (isCloudinaryConfigured) {
 
 export interface UploadedImage {
   url: string;
-  publicId: string;
+  // Nullable/optional to match the stored/DB shape (Product/Service
+  // `images`), which includes legacy/placeholder entries with no real
+  // Cloudinary asset. A fresh call to uploadImageBuffer() below always
+  // resolves a real string — this only widens the type for compatibility
+  // with values read back out of the database via Mongoose's own inferred
+  // subdocument type, not a change in what a successful upload returns.
+  publicId?: string | null;
 }
 
 /** Upload one in-memory image buffer to Cloudinary under an organised folder. */

@@ -31,7 +31,7 @@ export async function resolveImageUpdate({
   maxCount: number;
   folder: string;
 }): Promise<{ images: UploadedImage[]; toDelete: UploadedImage[] }> {
-  const kept = keepPublicIds ? current.filter((img) => keepPublicIds.includes(img.publicId)) : current;
+  const kept = keepPublicIds ? current.filter((img) => img.publicId != null && keepPublicIds.includes(img.publicId)) : current;
 
   if (kept.length + newFiles.length > maxCount) {
     throw new ApiError(422, `Too many images — ${maxCount} maximum for this listing.`);

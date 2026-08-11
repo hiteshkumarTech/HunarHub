@@ -1,14 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { User, ROLES } from '../models/User';
-import { Order } from '../models/Order';
+import { Order, ORDER_STATUSES } from '../models/Order';
 import { Review } from '../models/Review';
 import { Service } from '../models/Service';
 import { Product } from '../models/Product';
+import { Category } from '../models/Category';
+import { Complaint, COMPLAINT_STATUSES } from '../models/Complaint';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authRequired, requireRole } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
-import { entrepreneurCard, adminUserJson, adminListingJson } from '../utils/serialize';
+import { entrepreneurCard, adminUserJson, adminListingJson, adminOrderJson, categoryJson, complaintJson } from '../utils/serialize';
 import { deleteImages } from '../utils/imageGallery';
 import { ApiError } from '../utils/ApiError';
 
@@ -139,10 +141,111 @@ router.delete(
   }),
 );
 
+// GET /admin/orders?status=&kind=&q=&page=&limit= — read-only monitoring of
+// every order/request across the platform. Deliberately no PATCH here: admin
+// can inspect, not rewrite business-rule-governed status transitions that
+// belong to the entrepreneur who owns the order (see ROADMAP.md).
+router.get(
+  '/orders',
+  asyncHandler(async (req, res) => {
+    const { status, kind, q } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (status && (ORDER_STATUSES as readonly string[]).includes(String(status))) filter.status = status;
+    if (kind && (['service', 'product'] as readonly string[]).includes(String(kind))) filter.kind = kind;
+    if (q) {
+      const rx = new RegExp(String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.title = rx;
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(48, Math.max(1, Number(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .populate('customer', 'name')
+        .populate('entrepreneur', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Order.countDocuments(filter),
+    ]);
+
+    res.json({
+      orders: orders.map(adminOrderJson),
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    });
+  }),
+);
+
+// GET /admin/categories — same data as the public GET /api/categories, kept
+// here too so the admin panel doesn't need a special-cased unauthenticated
+// call. PATCH is the only admin-only mutation: label + active/inactive.
+router.get(
+  '/categories',
+  asyncHandler(async (_req, res) => {
+    const categories = await Category.find().sort({ id: 1 }).lean();
+    res.json({ categories: categories.map(categoryJson) });
+  }),
+);
+
+router.patch(
+  '/categories/:id',
+  validateBody(z.object({ label: z.string().min(1).max(60).optional(), active: z.boolean().optional() })),
+  asyncHandler(async (req, res) => {
+    const category = await Category.findOne({ id: req.params.id }).catch(() => null);
+    if (!category) throw new ApiError(404, 'Category not found');
+    Object.assign(category, req.body);
+    await category.save();
+    res.json({ category: categoryJson(category) });
+  }),
+);
+
+// GET /admin/complaints?status=&page=&limit= — every complaint, any reporter.
+router.get(
+  '/complaints',
+  asyncHandler(async (req, res) => {
+    const { status } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (status && (COMPLAINT_STATUSES as readonly string[]).includes(String(status))) filter.status = status;
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(48, Math.max(1, Number(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const [complaints, total] = await Promise.all([
+      Complaint.find(filter).populate('reporter', 'name').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Complaint.countDocuments(filter),
+    ]);
+
+    res.json({
+      complaints: complaints.map(complaintJson),
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    });
+  }),
+);
+
+router.patch(
+  '/complaints/:id',
+  validateBody(z.object({ status: z.enum(COMPLAINT_STATUSES).optional(), adminNote: z.string().max(2000).optional() })),
+  asyncHandler(async (req, res) => {
+    const complaint = await Complaint.findById(req.params.id).catch(() => null);
+    if (!complaint) throw new ApiError(404, 'Complaint not found');
+    Object.assign(complaint, req.body);
+    await complaint.save();
+    res.json({ complaint: complaintJson(complaint) });
+  }),
+);
+
 router.get(
   '/stats',
   asyncHandler(async (_req, res) => {
-    const [entrepreneurs, customers, admins, totalOrders, reviews, pendingOrders, completedOrders, serviceCount, productCount, availableEntrepreneurIds] =
+    const [entrepreneurs, customers, admins, totalOrders, reviews, pendingOrders, completedOrders, serviceCount, productCount, availableEntrepreneurIds, openComplaints] =
       await Promise.all([
         User.countDocuments({ role: 'entrepreneur' }),
         User.countDocuments({ role: 'customer' }),
@@ -154,6 +257,7 @@ router.get(
         Service.countDocuments({}),
         Product.countDocuments({}),
         User.find({ role: 'entrepreneur', 'profile.available': true }, '_id').lean(),
+        Complaint.countDocuments({ status: { $ne: 'resolved' } }),
       ]);
 
     // "Active" listings = owned by a seller who currently has availability on
@@ -176,6 +280,7 @@ router.get(
         reviews,
         totalListings: serviceCount + productCount,
         activeListings: activeServices + activeProducts,
+        openComplaints,
       },
     });
   }),

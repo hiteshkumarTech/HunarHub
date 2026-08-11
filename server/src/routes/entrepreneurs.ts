@@ -12,16 +12,20 @@ import { ApiError } from '../utils/ApiError';
 
 const router = Router();
 
-// GET /api/entrepreneurs?cat=&q=&maxPrice=&sort=rating|priceLow|exp
+// GET /api/entrepreneurs?cat=&q=&city=&state=&maxPrice=&sort=rating|priceLow|exp
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { cat, q, maxPrice, sort, verified, available } = req.query;
+    const { cat, q, city, state, maxPrice, sort, verified, available } = req.query;
     const filter: Record<string, unknown> = { role: 'entrepreneur' };
 
     if (cat && (CATEGORY_IDS as readonly string[]).includes(String(cat))) {
       filter['profile.category'] = cat;
     }
+    // Exact-ish (case-insensitive) location filter — distinct from the free-text
+    // `q` search below, which only fuzzy-matches location among other fields.
+    if (city) filter['profile.city'] = new RegExp(`^${String(city).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (state) filter['profile.state'] = new RegExp(`^${String(state).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (maxPrice) filter['profile.startingPrice'] = { $lte: Number(maxPrice) };
     if (verified === 'true') filter['profile.verified'] = true;
     if (available === 'true') filter['profile.available'] = true;

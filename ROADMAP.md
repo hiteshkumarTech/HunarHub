@@ -2,8 +2,9 @@
 
 _Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), an admin +
 listing-management + backend-tests pass, a CI + repository-portability pass, a production deployment
-verification pass, and a real image-uploads + product-gallery pass (M9). Supersedes the original pre-M1
-audit — most of P0 and P1 below are now done; this file tracks what's actually left._
+verification pass, a real image-uploads + product-gallery pass (M9), and an internship-requirement gap sweep
+(M10 — marketplace discovery, location filtering, admin order/category/complaint management). Supersedes the
+original pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's actually left._
 
 ## Done
 
@@ -158,6 +159,141 @@ audit — most of P0 and P1 below are now done; this file tracks what's actually
   uploading a replacement (removing it via `keepImages` is a no-op against a real `images` array that's
   already empty for a legacy-only listing — the fallback is display-only, not a real array entry to prune).
   Low-impact: only affects listings that predate this milestone and haven't had their photos touched since.
+
+**M10 — internship requirement gap sweep**
+
+_Context: after M9, a full requirement-by-requirement audit against the original internship brief found the
+implementation solid on almost every functional point, with a handful of real, meaningful gaps — most notably
+that "Profile → Products tab" was a weak substitute for a real product/service marketplace, since a customer
+had to find a seller before discovering anything they sell. M10 closes exactly those gaps and nothing else —
+explicitly not a platform rebuild. See the traceability matrix below for the complete requirement-by-requirement
+classification._
+
+- ✅ **Real marketplace discovery surface** — new `GET /api/listings` (`server/src/routes/listings.ts`) merges
+  services + products across every seller into one filterable, paginated feed (`kind`, `cat`, `city`, `state`,
+  `minPrice`/`maxPrice`, `q`), resolving seller-level filters (category/location, which live on `User.profile`,
+  not on the listing itself) to an entrepreneur-id set first. New `/marketplace` page (`src/pages/Marketplace.tsx`)
+  + `MarketplaceListingCard` — a customer can now find and evaluate a specific product or service directly,
+  without opening a seller's profile first. `/browse` (seller discovery, "Browse Talent") is unchanged and kept
+  as a distinct, separate surface — Header's "Products" nav item and a new PageBar link now point at
+  `/marketplace` instead.
+- ✅ **Genuine location filtering** — `city`/`state` were already collected at entrepreneur registration
+  (`Register.tsx`) and stored on `User.profile`, but `GET /api/entrepreneurs` only offered fuzzy multi-field
+  `q` search. Added real `city`/`state` query params (case-insensitive exact match, `entrepreneurs.ts`), kept
+  separate from `q`. `GET /api/listings` supports the same two params. No GPS/Maps/geocoding — exact string
+  match against the city/state the entrepreneur typed at registration, per the internship brief's explicit
+  "no geocoding" scope.
+- ✅ **Entrepreneur availability** — inspected first, found already fully wired end-to-end (Dashboard's
+  availability toggle → `PATCH /api/entrepreneurs/me` → `profile.available`, already authorization-tested).
+  M10 added one authorization regression test (`marketplace.test.ts`: a customer gets 403 on the same route)
+  and confirmed the marketplace/browse filters correctly reflect it — no new UI needed, matching the brief's
+  explicit "if already implemented, wire it in" guidance.
+- ✅ **Earnings overview** — inspected first, found the Dashboard already sums `completed` orders only (never
+  `declined`/`pending`/`accepted`) into an "Earnings" KPI. Added one more KPI next to it — "Completed orders"
+  (a count, not a new computation) — plus a `Dashboard.test.tsx` test asserting the sum and count are both
+  correct against a mixed-status order set (verifies declined/accepted/pending amounts are excluded, not just
+  that *some* number renders).
+- ✅ **Admin order/request monitoring** — new `GET /admin/orders` (`status`/`kind`/`q`/`page` filters, both
+  parties' names attached) + `AdminOrdersPanel` — a new read-only "Orders" tab in `/admin`. Deliberately no
+  status-mutation endpoint here: an order's status transitions are the owning entrepreneur's business-rule-governed
+  action (`PATCH /api/orders/:id/status`), not something today's business rules give an admin authority to
+  override — adding that would be a new capability the brief didn't ask for, not a gap-fill.
+- ✅ **Admin category/skill management** *(intentionally simplified — see below)* — new `Category` model +
+  `GET /api/categories` (public) + `GET/PATCH /admin/categories/:id` (admin-only: rename label, toggle
+  active/inactive) + a new "Categories" admin tab. `Register.tsx` and `Browse.tsx` now read the category list
+  from this endpoint instead of a compiled-in constant, so a rename/deactivate takes effect without a redeploy.
+- ✅ **Complaints/disputes** — new `Complaint` model (reporter, optional order ref, subject, message, status
+  `open`/`in_review`/`resolved`, admin note) + `POST /api/complaints` (any authenticated user, ownership-checked
+  against the referenced order if one is given) + `GET /api/complaints/mine` + admin
+  `GET/PATCH /admin/complaints/:id` (status + private note) + a new "Complaints" admin tab. Customer-facing
+  "Report an issue" inline form (`ComplaintForm.tsx`, same disclosure pattern as `MyOrders`' review form) is
+  wired into both `MyOrders` (customer) and `Dashboard` (entrepreneur), so either party to an order can report
+  it. No live chat, ticket threading, SLAs, or attachments — exactly the simple model the brief specified.
+- ✅ **Admin analytics** — one new, real, cheap metric: `openComplaints` (`Complaint.countDocuments({status:
+  {$ne: 'resolved'}})`) added to `GET /admin/stats` and shown on `AdminOverview`. No fabricated numbers, no
+  metric added that isn't backed by a real query.
+- ✅ **Backend authorization, verified by test, not just code inspection** — every new mutation sits behind
+  the same `authRequired`/`requireRole('admin')` pattern already used elsewhere. New tests confirm: a customer
+  can't touch admin category/order/complaint routes (403), a complaint's `orderId` is rejected if the reporter
+  isn't actually a party to that order (403), an unauthenticated complaint post is rejected (401), and
+  `GET /complaints/mine` only ever returns the caller's own complaints.
+- ✅ **Real production bug found and fixed along the way** — while verifying `seed.ts` runs cleanly against a
+  fresh database (a defensive check taken because M10 explicitly depends on seed data being demonstrable),
+  found that `Product`/`Service`'s embedded image schema had `publicId: { required: true }`, but the app's own
+  documented convention is that legacy/placeholder images legitimately have `publicId: null`. This predates
+  M10 (an M9 schema bug never caught because the route-test suite never constructs a null-`publicId` image, and
+  M9's own verification never ran the standalone seed script against a fresh DB). Fixed the schema
+  (`default: null`, not `required: true`) and widened `UploadedImage.publicId` to `string | null | undefined`
+  to match, with one behavior-preserving null-guard fix in `imageGallery.ts`. Verified via a throwaway
+  `mongodb-memory-server` smoketest (not committed) that `npm run seed` now completes cleanly with correct
+  earnings math on the seeded orders.
+- ✅ **Seed data** — 5 categories, 5 orders (2 completed + 1 accepted + 1 pending + 1 declined, giving the
+  earnings/admin-monitoring demo real mixed-status data to show), 1 demo complaint referencing a real
+  completed order. Reset-and-reseed only (`deleteMany` on its own collections) — never touches unrelated
+  collections, safe to re-run.
+- ✅ **Tests** — 12 new backend tests (`marketplace.test.ts`: listings filter by category/location/price/kind/
+  name search, empty-result-not-error, entrepreneurs city filter, availability-toggle authorization;
+  `complaints.test.ts`: create/ownership/authorization/scoping/admin management; `admin.test.ts`: orders
+  monitoring + category management authorization) — **82 backend tests total** (up from 57), zero regressions.
+  11 new frontend tests (`marketplace.test.tsx`: query-param building + pagination; `ComplaintForm.test.tsx`:
+  validation/submission/error handling; `AdminComplaintsPanel.test.tsx`: render/status-change/filter/empty-state;
+  `Dashboard.test.tsx`: earnings correctness against a mixed-status order set) — **30 frontend tests total**
+  (up from 19), zero regressions.
+
+**Intentionally simplified in M10** (explicit, not a silent gap):
+- **Category management stays a fixed 5-category enum**, admin-editable only for `label`/`active` — no
+  "add a new category" control. The valid category *id* set is shared, compile-time-known state across the
+  Mongoose schema (`User.ts`, `Category.ts`), two separate Zod validation schemas (`auth.ts`,
+  `entrepreneurs.ts`), the frontend's `CategoryId` union type, and the icon map (`craftIcons.tsx`) — real,
+  coupled changes across both apps. A UI "Add category" button that produced an id nothing else would accept
+  would be a fake button, not a feature. Renaming/deactivating one of the 5 (Cobbler, Potter/Kumhar, Tailor,
+  Artisan, Small Vendor — all preserved) is real and fully wired end-to-end.
+- **No order-status override from the admin panel** — monitoring is read-only by design; see the "Admin
+  order/request monitoring" entry above.
+- **Location filtering is exact-match on entrepreneur-entered text**, not geocoded/radius-based — matches the
+  brief's own "no GPS/Maps/geocoding" scope note.
+
+## Requirement traceability matrix (M10)
+
+_Every functional requirement from the internship brief, explicitly classified. "DONE" = fully implemented and
+tested; "INTENTIONALLY SIMPLIFIED" = implemented with a documented, deliberate scope reduction (see above);
+"OUT OF SCOPE" = explicitly excluded by the brief itself._
+
+| Requirement | Status | Implementation |
+|---|---|---|
+| Customer registration/login | DONE | `POST /api/auth/register`, `/login` (pre-existing, M1) |
+| Browse by category | DONE | `Browse.tsx` (sellers) + `Marketplace.tsx` (listings, M10) — category chips from `GET /api/categories` |
+| Search/filter by skill, location, price | DONE | `GET /api/entrepreneurs` (`q`, `city`, `state`, `maxPrice`) + `GET /api/listings` (M10: `cat`, `city`, `state`, `minPrice`/`maxPrice`, `q`) |
+| Entrepreneur profiles | DONE | `GET /api/entrepreneurs/:id`, `Profile.tsx` (pre-existing) |
+| Product gallery | DONE | Cloudinary uploads, up to 4 images (M9) |
+| Pricing | DONE | `price`/`startingPrice` throughout (pre-existing) |
+| Service requests | DONE | `POST /api/orders` with `kind: 'service'` (pre-existing) |
+| Product purchases | DONE | `POST /api/orders` with `kind: 'product'` (pre-existing) |
+| Order history | DONE | `GET /api/orders/mine`, `MyOrders.tsx` (pre-existing) |
+| Ratings | DONE | `POST /api/reviews`, earned-review rule (pre-existing) |
+| Entrepreneur dashboard | DONE | `Dashboard.tsx` (pre-existing) |
+| Entrepreneur registration/profile | DONE | `Register.tsx` incl. craft/city/state (pre-existing) |
+| Listings management | DONE | `ListingsManager.tsx`, `POST/PATCH/DELETE /api/services`, `/products` (pre-existing) |
+| Accept/reject requests | DONE | `PATCH /api/orders/:id/status`, Dashboard's incoming-requests panel (pre-existing) |
+| Manage availability | DONE | `PATCH /api/entrepreneurs/me`, Dashboard toggle (pre-existing; M10 added an authorization test) |
+| View orders (entrepreneur) | DONE | `GET /api/orders/incoming`, Dashboard (pre-existing) |
+| Earnings overview | DONE | Dashboard "Earnings (completed)" + "Completed orders" KPIs (pre-existing sum; M10 added the count KPI + a correctness test) |
+| Admin: verify entrepreneurs | DONE | `PATCH /api/admin/entrepreneurs/:id/verify` (pre-existing) |
+| Admin: manage categories/skills | INTENTIONALLY SIMPLIFIED | `Category` model, `GET/PATCH /api/admin/categories/:id` — label + active/inactive on the fixed 5, no dynamic add (M10; trade-off explained above) |
+| Admin: monitor orders | DONE | `GET /api/admin/orders`, `AdminOrdersPanel` — read-only (M10) |
+| Admin: handle disputes/complaints | DONE | `Complaint` model, `POST /api/complaints`, `GET/PATCH /api/admin/complaints/:id`, `AdminComplaintsPanel` (M10) |
+| Admin: analytics/reports | DONE | `AdminOverview.tsx`, `GET /api/admin/stats` (pre-existing; M10 added `openComplaints`) |
+| Responsive UI | DONE | Tailwind mobile-first throughout, incl. all new M10 screens (375px/tablet/desktop) |
+| Secure auth | DONE | JWT + bcrypt (pre-existing), credential-rotation hardening (M8) |
+| Reliable order tracking | DONE | `OrderTimeline`/`StatusBadge` (pre-existing) |
+| Usable UI (loading/empty/error states) | DONE | `States.tsx` primitives used throughout, incl. every new M10 screen |
+| Deployment-ready | DONE | Render + Vercel + Atlas, verified live (M8) |
+| Native mobile app | OUT OF SCOPE | Explicitly excluded by the brief — web-responsive only |
+| International shipping | OUT OF SCOPE | Explicitly excluded by the brief |
+| AI features | OUT OF SCOPE | Explicitly excluded by the brief |
+| Logistics/delivery tracking | OUT OF SCOPE | Explicitly excluded by the brief |
+| Payment gateway / wallet | OUT OF SCOPE | Explicitly deferred to "Future Enhancements" by the brief itself — see Remaining §9 below |
+| Microservices / Redis / queues / Kafka / enterprise monitoring | OUT OF SCOPE | Explicitly excluded by the brief — this is an internship-scope monolith, deliberately |
 
 ## 🔴 One manual action still required
 

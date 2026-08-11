@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Package, Clock, Star, Wallet, Check } from 'lucide-react';
+import { Package, Clock, Star, Wallet, CheckCircle2, Check, Flag } from 'lucide-react';
 import { PageBar } from '../components/PageBar';
 import { Monogram } from '../components/Monogram';
+import { ComplaintForm } from '../components/ComplaintForm';
 import { ErrorState } from '../components/ui/States';
 import { Kpi } from '../components/ui/Kpi';
 import { useToast } from '../components/ui/Toast';
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const profile = user?.profile ?? null;
   const [available, setAvailable] = useState<boolean>(profile?.available ?? true);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   const listing = useEntrepreneur(user?.id);
   const incoming = useIncomingOrders(Boolean(user));
@@ -28,7 +30,9 @@ export default function Dashboard() {
   const orders = incoming.data?.orders ?? [];
   const pending = orders.filter((o) => o.status === 'pending');
   const activeCount = orders.filter((o) => o.status === 'accepted').length;
-  const earnings = orders.filter((o) => o.status === 'completed').reduce((sum, o) => sum + o.price, 0);
+  const completedOrders = orders.filter((o) => o.status === 'completed');
+  // Earnings = sum of completed orders only — never declined/cancelled/pending.
+  const earnings = completedOrders.reduce((sum, o) => sum + o.price, 0);
   const services = listing.data?.services ?? [];
   const products = listing.data?.products ?? [];
 
@@ -90,8 +94,9 @@ export default function Dashboard() {
           </label>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-5">
           <Kpi icon={<Wallet size={16} />} label="Earnings (completed)" value={inr(earnings)} />
+          <Kpi icon={<CheckCircle2 size={16} />} label="Completed orders" value={completedOrders.length} />
           <Kpi icon={<Package size={16} />} label="Active orders" value={activeCount} />
           <Kpi icon={<Clock size={16} />} label="Pending requests" value={pending.length} />
           <Kpi icon={<Star size={16} />} label="Rating" value={`${profile?.ratingAvg ?? 0} ★`} />
@@ -114,51 +119,64 @@ export default function Dashboard() {
             ) : (
               <div className="divide-y divide-line">
                 {orders.map((o) => (
-                  <div key={o.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Monogram name={customerName(o)} size={38} />
-                      <div className="min-w-0">
-                        <div className="truncate text-[14px] font-medium text-fg">{customerName(o)}</div>
-                        <div className="truncate text-[12px] text-muted">
-                          {o.title} · <span className="font-medium text-fg">{inr(o.price)}</span>
+                  <div key={o.id} className="px-5 py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Monogram name={customerName(o)} size={38} />
+                        <div className="min-w-0">
+                          <div className="truncate text-[14px] font-medium text-fg">{customerName(o)}</div>
+                          <div className="truncate text-[12px] text-muted">
+                            {o.title} · <span className="font-medium text-fg">{inr(o.price)}</span>
+                          </div>
                         </div>
                       </div>
+                      {o.status === 'pending' ? (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            onClick={() => act(o, 'accepted')}
+                            disabled={updateStatus.isPending}
+                            className="inline-flex items-center gap-1 rounded-md bg-fg px-3 py-2 text-[11px] font-mono uppercase tracking-widest text-surface hover:brightness-110 disabled:opacity-50"
+                          >
+                            <Check size={13} />
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => act(o, 'declined')}
+                            disabled={updateStatus.isPending}
+                            className="rounded-md border border-line px-3 py-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:border-accent disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      ) : o.status === 'accepted' ? (
+                        <button
+                          onClick={() => act(o, 'completed')}
+                          disabled={updateStatus.isPending}
+                          className="shrink-0 rounded-md border border-line px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-muted hover:border-accent disabled:opacity-50"
+                        >
+                          Mark complete
+                        </button>
+                      ) : (
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-md px-3 py-2 text-[10px] font-mono uppercase tracking-widest',
+                            o.status === 'completed' ? 'bg-green-50 text-green-700' : 'bg-surface text-muted',
+                          )}
+                        >
+                          {o.status}
+                        </span>
+                      )}
                     </div>
-                    {o.status === 'pending' ? (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          onClick={() => act(o, 'accepted')}
-                          disabled={updateStatus.isPending}
-                          className="inline-flex items-center gap-1 rounded-md bg-fg px-3 py-2 text-[11px] font-mono uppercase tracking-widest text-surface hover:brightness-110 disabled:opacity-50"
-                        >
-                          <Check size={13} />
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => act(o, 'declined')}
-                          disabled={updateStatus.isPending}
-                          className="rounded-md border border-line px-3 py-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:border-accent disabled:opacity-50"
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    ) : o.status === 'accepted' ? (
-                      <button
-                        onClick={() => act(o, 'completed')}
-                        disabled={updateStatus.isPending}
-                        className="shrink-0 rounded-md border border-line px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-muted hover:border-accent disabled:opacity-50"
-                      >
-                        Mark complete
-                      </button>
+
+                    {reporting === o.id ? (
+                      <ComplaintForm orderId={o.id} onDone={() => setReporting(null)} />
                     ) : (
-                      <span
-                        className={cn(
-                          'shrink-0 rounded-md px-3 py-2 text-[10px] font-mono uppercase tracking-widest',
-                          o.status === 'completed' ? 'bg-green-50 text-green-700' : 'bg-surface text-muted',
-                        )}
+                      <button
+                        onClick={() => setReporting(o.id)}
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-accent"
                       >
-                        {o.status}
-                      </span>
+                        <Flag size={12} /> Report an issue
+                      </button>
                     )}
                   </div>
                 ))}

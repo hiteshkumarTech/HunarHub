@@ -17,6 +17,9 @@ export function PageBar({ crumb }: { crumb?: string }) {
         <Link to="/browse" className="text-[11px] font-mono uppercase tracking-widest text-gray-600 hover:text-black">
           Browse
         </Link>
+        <Link to="/marketplace" className="text-[11px] font-mono uppercase tracking-widest text-gray-600 hover:text-black">
+          Marketplace
+        </Link>
         {crumb && <span className="hidden text-[11px] font-mono uppercase tracking-widest text-gray-400 md:inline">{crumb}</span>}
       </div>
       <UserMenu />

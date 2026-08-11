@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowRight, ArrowUpRight, Plus, MapPin, Check, Clock, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Plus, MapPin, Check, Clock, X, Loader2 } from 'lucide-react';
 import { PageBar } from '../components/PageBar';
 import { Monogram } from '../components/Monogram';
 import { Stars } from '../components/Stars';
@@ -39,6 +39,17 @@ export default function Profile() {
   const [tab, setTab] = useState<TabId>('services');
   const [lightbox, setLightbox] = useState<ProductItem | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  // Tracks which specific service/product is mid-request, so the shared
+  // createOrder mutation's isPending flag (true for ALL buttons at once,
+  // since one mutation instance backs every Request/Buy button on this page)
+  // can still show "Sending…" on only the one the visitor actually clicked.
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  // Anchors the sticky bottom CTA's scroll/focus target — stays mounted
+  // regardless of which tab is active (unlike the TabPanels themselves,
+  // which unmount when inactive), so it's a stable target to scroll to.
+  const servicesSectionRef = useRef<HTMLDivElement>(null);
+  const firstRequestButtonRef = useRef<HTMLButtonElement>(null);
+  const [pendingScrollToServices, setPendingScrollToServices] = useState(false);
 
   useEffect(() => {
     if (data?.entrepreneur) {
@@ -46,6 +57,23 @@ export default function Profile() {
       pushRecentlyViewed({ id: en.id, name: en.name, craft: en.craft, city: en.city, category: en.category });
     }
   }, [data]);
+
+  // Scroll/focus target for the sticky bottom CTA below — defined up here
+  // (not after the early returns) because every hook in this component must
+  // run unconditionally on every render, in the same order, regardless of
+  // loading/error state.
+  function focusServicesArea() {
+    servicesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    firstRequestButtonRef.current?.focus({ preventScroll: true });
+  }
+
+  useEffect(() => {
+    if (tab === 'services' && pendingScrollToServices) {
+      focusServicesArea();
+      setPendingScrollToServices(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pendingScrollToServices]);
 
   if (isLoading) {
     return (
@@ -90,28 +118,49 @@ export default function Profile() {
 
   const requestService = (s: ServiceItem) => {
     if (!requireCustomer()) return;
+    setPendingItemId(s.id);
     createOrder.mutate(
       { entrepreneurId: e.id, kind: 'service', itemId: s.id },
       {
-        onSuccess: () => toast(`Request sent to ${e.name} for “${s.name}”.`, 'success'),
+        onSuccess: () => toast(`Request sent to ${e.name} for “${s.name}” — track it on My Orders.`, 'success'),
         onError: (err) => toast(err instanceof Error ? err.message : 'Could not place request.', 'error'),
+        onSettled: () => setPendingItemId(null),
       },
     );
   };
 
   const buyProduct = (p: ProductItem) => {
     if (!requireCustomer()) return;
+    setPendingItemId(p.id);
     createOrder.mutate(
       { entrepreneurId: e.id, kind: 'product', itemId: p.id },
       {
         onSuccess: () => {
           setLightbox(null);
-          toast(`Order placed with ${e.name} for “${p.name}”.`, 'success');
+          toast(`Order placed with ${e.name} for “${p.name}” — track it on My Orders.`, 'success');
         },
         onError: (err) => toast(err instanceof Error ? err.message : 'Could not place order.', 'error'),
+        onSettled: () => setPendingItemId(null),
       },
     );
   };
+
+  // The sticky bottom CTA used to just call setTab('services') — a no-op
+  // when Services was already the active tab, so clicking it there visibly
+  // did nothing. Now it always does something useful: switch tabs if
+  // needed, then scroll the services list into view and focus the first
+  // Request button so keyboard users land somewhere actionable too. It
+  // never auto-submits a request on the visitor's behalf, even when there's
+  // only one service — the visitor still has to choose and click Request.
+  function handleStickyServiceCta() {
+    if (services.length === 0) return;
+    if (tab !== 'services') {
+      setTab('services');
+      setPendingScrollToServices(true);
+    } else {
+      focusServicesArea();
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -182,13 +231,13 @@ export default function Profile() {
           }))}
         />
 
-        <div className="py-8">
+        <div ref={servicesSectionRef} className="py-8">
           <TabPanel id="services" activeId={tab} idPrefix="profile">
             {services.length === 0 ? (
               <EmptyState title="No services listed yet" />
             ) : (
               <div className="grid max-w-[760px] gap-3">
-                {services.map((s) => (
+                {services.map((s, i) => (
                   <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4 transition-colors hover:border-black">
                     <div className="flex min-w-0 items-center gap-3">
                       {s.images[0] && (
@@ -210,11 +259,12 @@ export default function Profile() {
                     <div className="flex items-center gap-4">
                       <div className="text-[16px] font-semibold">{inr(s.price)}</div>
                       <button
+                        ref={i === 0 ? firstRequestButtonRef : undefined}
                         onClick={() => requestService(s)}
                         disabled={createOrder.isPending}
-                        className="rounded-md bg-[#111] px-4 py-2 text-[11px] font-mono uppercase tracking-widest text-white hover:bg-black disabled:opacity-50"
+                        className="min-w-[84px] rounded-md bg-[#111] px-4 py-2 text-[11px] font-mono uppercase tracking-widest text-white hover:bg-black disabled:opacity-50"
                       >
-                        Request
+                        {pendingItemId === s.id ? 'Sending…' : 'Request'}
                       </button>
                     </div>
                   </div>
@@ -258,10 +308,10 @@ export default function Profile() {
                         <button
                           onClick={() => buyProduct(p)}
                           disabled={createOrder.isPending}
-                          aria-label={`Order ${p.name}`}
+                          aria-label={pendingItemId === p.id ? `Sending order for ${p.name}` : `Order ${p.name}`}
                           className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 hover:border-black disabled:opacity-50"
                         >
-                          <Plus size={15} />
+                          {pendingItemId === p.id ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                         </button>
                       </div>
                     </div>
@@ -311,9 +361,16 @@ export default function Profile() {
           <span className="font-mono text-[11px] uppercase tracking-widest text-gray-400">Starting at </span>
           <span className="font-semibold text-[#111]">{inr(e.start)}</span>
         </div>
-        <button onClick={() => setTab('services')} className="flex items-center gap-2 rounded-md bg-[#111] px-6 py-3 text-[13px] font-medium text-white hover:bg-black">
-          Request a service <ArrowRight size={16} />
-        </button>
+        {services.length === 0 ? (
+          <span className="text-[13px] italic text-gray-400">No services listed yet</span>
+        ) : (
+          <button
+            onClick={handleStickyServiceCta}
+            className="flex items-center gap-2 rounded-md bg-[#111] px-6 py-3 text-[13px] font-medium text-white hover:bg-black"
+          >
+            Request a service <ArrowRight size={16} />
+          </button>
+        )}
       </div>
 
       {lightbox && (
@@ -358,9 +415,9 @@ export default function Profile() {
                 <button
                   onClick={() => buyProduct(lightbox)}
                   disabled={createOrder.isPending}
-                  className="rounded-md bg-[#111] px-4 py-2 text-[12px] font-medium text-white hover:bg-black disabled:opacity-50"
+                  className="min-w-[64px] rounded-md bg-[#111] px-4 py-2 text-[12px] font-medium text-white hover:bg-black disabled:opacity-50"
                 >
-                  Order
+                  {pendingItemId === lightbox.id ? 'Sending…' : 'Order'}
                 </button>
                 <button onClick={() => setLightbox(null)} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 hover:border-black">
                   <X size={16} />

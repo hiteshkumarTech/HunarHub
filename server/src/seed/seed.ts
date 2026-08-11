@@ -23,14 +23,7 @@ import { Review } from '../models/Review';
 import { Order } from '../models/Order';
 import { Category } from '../models/Category';
 import { Complaint } from '../models/Complaint';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  cobbler: 'Cobbler',
-  potter: 'Potter (Kumhar)',
-  tailor: 'Tailor',
-  artisan: 'Artisan',
-  vendor: 'Vendor',
-};
+import { CATEGORY_LABELS } from '../models/categoryLabels';
 
 const pic = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${encodeURIComponent(seed)}/${w}/${h}?grayscale`;

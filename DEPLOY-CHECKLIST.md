@@ -173,8 +173,8 @@ send only the status codes (`A: 401`, `B: 401`, …) — never the values themse
 
 ## 0. Before you deploy
 
-- [ ] `npm run typecheck && npm test && npm run build` passes at the repo root (frontend).
-- [ ] `cd server && npm run typecheck && npm test` passes (55 tests, isolated in-memory MongoDB).
+- [ ] `npm run typecheck && npm test && npm run build` passes at the repo root (frontend, 30 tests).
+- [ ] `cd server && npm run typecheck && npm test` passes (85 tests, isolated in-memory MongoDB).
 - [ ] CI is green on the commit you're deploying — check the Actions tab, or
       `curl https://api.github.com/repos/hiteshkumarTech/HunarHub/commits/<sha>/check-runs` (public API, no
       auth needed for a public repo).

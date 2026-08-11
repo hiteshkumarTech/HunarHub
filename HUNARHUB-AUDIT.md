@@ -1,5 +1,11 @@
 # HunarHub — Full Product & Engineering Audit + Milestone Roadmap
 
+> **📜 Historical document — describes the project's state *before* M1.** Everything this audit flags as
+> missing (auth, API wiring, orders, admin console, discovery, design system, tests, CI) has since been built.
+> Kept for context on how the roadmap below was originally derived — for **current** status, see
+> **[README.md](./README.md)** and **[ROADMAP.md](./ROADMAP.md)**, which are the maintained, up-to-date
+> documents.
+
 _Audit of the deployed project across five lenses (Product Design · UI/UX · Architecture · Scalability · Business Value). No code is changed here. Implementation begins only after you approve the roadmap, one milestone at a time._
 
 ---

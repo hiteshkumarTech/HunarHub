@@ -2,9 +2,31 @@
 
 _Last refreshed after the M1–M5 milestones, a QA/polish pass (a11y, performance, docs), an admin +
 listing-management + backend-tests pass, a CI + repository-portability pass, a production deployment
-verification pass, a real image-uploads + product-gallery pass (M9), and an internship-requirement gap sweep
-(M10 — marketplace discovery, location filtering, admin order/category/complaint management). Supersedes the
-original pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's actually left._
+verification pass, a real image-uploads + product-gallery pass (M9), an internship-requirement gap sweep
+(M10 — marketplace discovery, location filtering, admin order/category/complaint management), and the final
+submission package (M11 — PRD, technical docs, demo script, submission checklist). Supersedes the original
+pre-M1 audit — most of P0 and P1 below are now done; this file tracks what's actually left._
+
+## Internship submission status
+
+**M1–M10 → Completed.** Every functional requirement from the internship brief is implemented, tested, and
+verified live in production — see the [requirement traceability matrix](#requirement-traceability-matrix-m10)
+below and [README.md § Requirement coverage](./README.md#requirement-coverage) for the concise version.
+
+**M11 → Final submission package completed.** PRD ([PRD.md](./PRD.md)), technical documentation
+([TECHNICAL-DESIGN.md](./TECHNICAL-DESIGN.md)), a demo script ([DEMO-SCRIPT.md](./DEMO-SCRIPT.md)), and a
+submission checklist ([SUBMISSION-CHECKLIST.md](./SUBMISSION-CHECKLIST.md)) were added; the README was
+restructured for a ~2-minute evaluator read; stale documentation was corrected (see the M11 section below).
+
+**HunarHub is functionally complete as an internship submission.** Everything below "Remaining" is optional,
+longer-horizon backlog — genuinely future work, not gaps in what was asked for. There is no planned M12.
+
+**Future Enhancements** (explicitly out of scope for this submission, per the brief itself):
+- Payments / digital wallet (e.g. Razorpay) with hold/escrow on completion
+- Logistics / delivery tracking, international shipping
+- Native mobile app
+- AI-driven recommendations
+- A fully dynamic, admin-extensible category/skill taxonomy
 
 ## Done
 
@@ -294,6 +316,53 @@ tested; "INTENTIONALLY SIMPLIFIED" = implemented with a documented, deliberate s
 | Logistics/delivery tracking | OUT OF SCOPE | Explicitly excluded by the brief |
 | Payment gateway / wallet | OUT OF SCOPE | Explicitly deferred to "Future Enhancements" by the brief itself — see Remaining §9 below |
 | Microservices / Redis / queues / Kafka / enterprise monitoring | OUT OF SCOPE | Explicitly excluded by the brief — this is an internship-scope monolith, deliberately |
+
+**M11 — final submission package**
+
+_Context: with M10 complete, the internship brief's own scope is fully satisfied. M11 is deliberately not a
+feature milestone — no product code changed except fixing genuinely stale documentation found along the way._
+
+- ✅ **Documentation audit** — read every doc (README, ROADMAP, DEPLOY-CHECKLIST, DESIGN-SYSTEM,
+  HUNARHUB-AUDIT, server/README) against the current codebase. Found two real staleness issues, fixed both:
+  `server/README.md` had a pre-M1-era endpoint table missing every M9/M10 route and ended with a leftover
+  "give me the Render URL and I'll add..." note — replaced with a short pointer to the authoritative docs.
+  `DEPLOY-CHECKLIST.md` cited a stale "55 tests" figure — corrected to the current counts. `HUNARHUB-AUDIT.md`
+  (a legitimate pre-M1 audit, now factually describing a state the app hasn't been in since M1) got a banner
+  marking it historical, rather than being rewritten or deleted — it has real value as a record of how the
+  original roadmap was derived.
+- ✅ **README restructured** for a ~2-minute evaluator read: problem statement, features by role, tech stack,
+  a Mermaid architecture diagram, main user flow, local setup, demo accounts, testing, deployment, a concise
+  requirement-coverage table, known limitations, and future enhancements. The exhaustive milestone-by-milestone
+  narrative that used to live in README's "Where things stand" section was trimmed to what's still there in
+  this file — README is now the front door, this file is the detailed log.
+- ✅ **PRD.md** (new) — product overview, problem, personas (customer/entrepreneur/admin), objectives, in/out
+  of scope, functional + non-functional requirements, user flows, core entities, success metrics, assumptions,
+  constraints, future enhancements.
+- ✅ **TECHNICAL-DESIGN.md** (new) — system architecture (with a Mermaid diagram), frontend/backend structure,
+  auth/authorization model, full data model, the Cloudinary upload sequence (Mermaid), key design decisions
+  and trade-offs (moved here from README, since this is where they belong), the full REST API reference, and
+  CI/testing architecture.
+- ✅ **DEMO-SCRIPT.md** (new) — a timed 2–3 minute walkthrough script covering homepage → Browse → Marketplace
+  → customer flow → entrepreneur flow → admin flow → tech stack → closing.
+- ✅ **SUBMISSION-CHECKLIST.md** (new) — application/repository/testing/submission checkboxes, an 8-item
+  manual screenshot list (no browser-automation tool was used, so none were fabricated), a ~150-word
+  submission-ready project description, and resume/portfolio bullets (no invented metrics — every claim traces
+  to something actually verifiable in this repo).
+- ✅ **Demo/seed data reviewed, found already strong** — 8 entrepreneurs across all 5 categories, 8 distinct
+  Indian cities/states, prices from ₹60–3500, mixed ratings/availability/verification, mixed order statuses,
+  one demo complaint. No seed changes made — the brief only calls for changes if the dataset is "obviously
+  weak," and it wasn't.
+- ✅ **Security/secret sweep** — grepped every tracked file for `mongodb+srv://` literals, `JWT_SECRET=`/
+  `CLOUDINARY_API_SECRET=` with real values, and `password123` usages. Every match was a placeholder template,
+  a deliberately-public demo credential, or a test fixture — no real secret was ever committed, no history
+  rewrite needed.
+- ✅ **Full QA re-run, no regressions** — 30/30 frontend tests, 85/85 backend tests, both typechecks clean,
+  frontend production build passes. No app code changed this milestone, so these numbers are identical to
+  M10's, as expected.
+- ✅ **Live read-only smoke check** — frontend HTTP 200, backend `/health` 200, `/api/listings`,
+  `/api/categories`, `/api/entrepreneurs` all responding with real data. No test accounts or test orders
+  created — M10 already proved end-to-end functionality live; this pass only confirms the deployment is still
+  up, not that the features work (that's already established).
 
 ## 🔴 One manual action still required
 
